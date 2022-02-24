@@ -6,7 +6,7 @@ using DesktopUI2.Models;
 using Speckle.Newtonsoft.Json;
 using System.IO;
 using System.Text;
-using SAP2000v1;
+using CSiAPIv1;
 
 namespace ConnectorSAP2000.Storage
 {

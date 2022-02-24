@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Objects.Geometry;
 using Objects.Structural.Geometry;
 using Objects.Structural.Analysis;
-using SAP2000v1;
+using CSiAPIv1;
 
 namespace Objects.Converter.SAP2000
 {

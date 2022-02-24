@@ -14,7 +14,7 @@ using Avalonia.Controls;
 using Avalonia.ReactiveUI;
 
 
-using ETABSv1;
+using CSiAPIv1;
 
 using Speckle.Core.Logging;
 using Speckle.ConnectorETABS.Util;
@@ -22,7 +22,6 @@ using Speckle.ConnectorETABS.UI;
 using System.Reflection;
 using System.IO;
 
-using Speckle.ConnectorETABS.Util;
 using Speckle.Core.Kits;
 
 namespace SpeckleConnectorETABS
@@ -63,7 +62,7 @@ namespace SpeckleConnectorETABS
 
     private static void AppMain(Application app, string[] args)
     {
-      var viewModel = new MainWindowViewModel(Bindings);
+      var viewModel = new MainWindowViewModel();
       MainWindow = new MainWindow
       {
         DataContext = viewModel
@@ -75,7 +74,7 @@ namespace SpeckleConnectorETABS
 
     public static void OpenOrFocusSpeckle(cSapModel model)
     {
-      Bindings = new ConnectorBindingsETABS(model);
+      //Bindings = new ConnectorBindingsETABS(model);
       CreateOrFocusSpeckle();
 
 
@@ -146,7 +145,7 @@ namespace SpeckleConnectorETABS
       try
       {
         cHelper helper = new Helper();
-        var etabsObject = helper.GetObject("CSI.ETABS.API.ETABSObject");
+        var etabsObject = helper.GetObject("CSI.SAP2000.API.SapObject");
         model = etabsObject.SapModel;
       }
       catch

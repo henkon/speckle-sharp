@@ -37,6 +37,9 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="CSiAPIv1">
+      <HintPath>..\..\..\..\..\..\..\Program Files\Computers and Structures\SAP2000 23\CSiAPIv1.dll</HintPath>
+    </Reference>
     <Reference Include="PresentationFramework" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
@@ -77,13 +80,13 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia">
-      <Version>0.10.11</Version>
+      <Version>0.10.8</Version>
     </PackageReference>
     <PackageReference Include="Avalonia.Desktop">
-      <Version>0.10.11</Version>
+      <Version>0.10.8</Version>
     </PackageReference>
     <PackageReference Include="Avalonia.ReactiveUI">
-      <Version>0.10.11</Version>
+      <Version>0.10.8</Version>
     </PackageReference>
     <PackageReference Include="CSI_ETABSv18_x64">
       <Version>1.0.0</Version>

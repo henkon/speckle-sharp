@@ -1,4 +1,4 @@
-﻿using SAP2000v1;
+﻿using CSiAPIv1;
 using Objects.Structural.Geometry;
 using Objects.Structural.Results;
 using Speckle.Core.Models;
@@ -23,27 +23,7 @@ namespace Objects.Converter.SAP2000
       List<string> convertedFrameNames = frameNames.ToList();
       #endregion
 
-      #region Retrieve pier names
-
-      int numberOfPierNames = 0;
-      var pierNames = new string[] { };
-
-      Model.PierLabel.GetNameList(ref numberOfPierNames, ref pierNames);
-      List<string> convertedPierNames = pierNames.ToList();
-
-      #endregion
-
-      #region Retrieve spandrel names
-
-      int numberOfSpandrelNames = 0;
-      var spandrelNames = new string[] { };
-      var isMultiStory = new bool[] { };
-
-      Model.SpandrelLabel.GetNameList(ref numberOfSpandrelNames, ref spandrelNames, ref isMultiStory);
-      List<string> convertedSpandrelNames = spandrelNames.ToList();
-
-
-      #endregion
+      
 
       #region Retrieve area names
 
@@ -56,7 +36,7 @@ namespace Objects.Converter.SAP2000
 
       #endregion
 
-      ResultSetAll results = new ResultSetAll(AllResultSet1dToSpeckle(convertedFrameNames, convertedPierNames, convertedSpandrelNames), AreaResultSet2dToSpeckle(convertedAreaNames), new ResultSet3D(), new ResultGlobal(), AllResultSetNodesToSpeckle());
+      ResultSetAll results = new ResultSetAll(AllResultSet1dToSpeckle(convertedFrameNames), AreaResultSet2dToSpeckle(convertedAreaNames), new ResultSet3D(), new ResultGlobal(), AllResultSetNodesToSpeckle());
 
       return results;
     }

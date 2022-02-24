@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-
 namespace Objects.Converter.SAP2000
 {
   public partial class ConverterSAP2000
@@ -20,7 +19,7 @@ namespace Objects.Converter.SAP2000
         obj = elm = pointElm = loadCase = stepType = new string[] { };
         stepNum = f11 = f22 = f12 = fMax = fMin = fAngle = fVonMises = m11 = m22 = m12 = mMax = mMin = mAngle = v13 = v23 = vMax = vAngle = new double[] { };
 
-        Model.Results.AreaForceShell(areaName, SAP2000v1.eItemTypeElm.ObjectElm, ref numberOfForceResults, ref obj, ref elm, ref pointElm, ref loadCase, ref stepType, ref stepNum, ref f11, ref f22, ref f12, ref fMax, ref fMin, ref fAngle, ref fVonMises, ref m11, ref m22, ref m12, ref mMax, ref mMin, ref mAngle, ref v13, ref v23, ref vMax, ref vAngle);
+        Model.Results.AreaForceShell(areaName,  CSiAPIv1.eItemTypeElm.ObjectElm, ref numberOfForceResults, ref obj, ref elm, ref pointElm, ref loadCase, ref stepType, ref stepNum, ref f11, ref f22, ref f12, ref fMax, ref fMin, ref fAngle, ref fVonMises, ref m11, ref m22, ref m12, ref mMax, ref mMin, ref mAngle, ref v13, ref v23, ref vMax, ref vAngle);
         #endregion
 
         #region Return stress results
@@ -30,7 +29,7 @@ namespace Objects.Converter.SAP2000
         stressObj = stressElm = stressPointElm = stressLoadCase = stressStepType = new string[] { };
         stressStepNum = S11Top = S22Top = S12Top = SMaxTop = SMinTop = SAngleTop = sVonMisesTop = S11Bot = S22Bot = S12Bot = SMaxBot = SMinBot = SAngleBot = sVonMisesBot = S13Avg = S23Avg = SMaxAvg = SAngleAvg = new double[] { };
 
-        Model.Results.AreaStressShell(areaName, SAP2000v1.eItemTypeElm.ObjectElm, ref numberOfStressResults, ref stressObj, ref stressElm, ref stressPointElm, ref stressLoadCase, ref stressStepType, ref stressStepNum, ref S11Top, ref S22Top, ref S12Top, ref SMaxTop, ref SMinTop, ref SAngleTop, ref sVonMisesTop, ref S11Bot, ref S22Bot, ref S12Bot, ref SMaxBot, ref SMinBot, ref SAngleBot, ref sVonMisesBot, ref S13Avg, ref S23Avg, ref SMaxAvg, ref SAngleAvg);
+        Model.Results.AreaStressShell(areaName, CSiAPIv1.eItemTypeElm.ObjectElm, ref numberOfStressResults, ref stressObj, ref stressElm, ref stressPointElm, ref stressLoadCase, ref stressStepType, ref stressStepNum, ref S11Top, ref S22Top, ref S12Top, ref SMaxTop, ref SMinTop, ref SAngleTop, ref sVonMisesTop, ref S11Bot, ref S22Bot, ref S12Bot, ref SMaxBot, ref SMinBot, ref SAngleBot, ref sVonMisesBot, ref S13Avg, ref S23Avg, ref SMaxAvg, ref SAngleAvg);
         #endregion
 
         for (int i = 0; i < numberOfForceResults; i++)

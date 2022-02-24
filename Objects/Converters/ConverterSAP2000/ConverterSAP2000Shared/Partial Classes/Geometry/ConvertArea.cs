@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
-using SAP2000v1;
+using CSiAPIv1;
 using Objects.Structural.Geometry;
 using Objects.Structural.Analysis;
 using Speckle.Core.Models;
@@ -155,7 +155,7 @@ namespace Objects.Converter.SAP2000
       polygonMesher.Init(coordinates);
       var faces = polygonMesher.Faces();
       var vertices = polygonMesher.Coordinates;
-      speckleStructArea.displayMesh = new Geometry.Mesh(vertices, faces, units: ModelUnits());
+      speckleStructArea.displayMesh = new Geometry.Mesh(vertices, faces.ToArray(), units: ModelUnits());
 
       //Model.AreaObj.GetModifiers(area, ref value);
       //speckleProperty2D.modifierInPlane = value[2];

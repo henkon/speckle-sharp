@@ -13,7 +13,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.ReactiveUI;
 
-using SAP2000v1;
+using CSiAPIv1;
 
 using Speckle.Core.Logging;
 using Speckle.ConnectorSAP2000.Util;
@@ -25,7 +25,7 @@ namespace SpeckleConnectorSAP2000
 {
   public class cPlugin
   {
-    public static cPluginCallback pluginCallback { get; set; }
+    public static cPluginCallback CSiAPIv1 { get; set; }
     public static bool isSpeckleClosed { get; set; } = false;
     public Timer SelectionTimer;
     public static cSapModel model { get; set; }
@@ -61,14 +61,14 @@ namespace SpeckleConnectorSAP2000
     private static void SpeckleWindowClosed(object sender, EventArgs e)
     {
       isSpeckleClosed = true;
-      pluginCallback.Finish(0);
+      CSiAPIv1.Finish(0);
     }
 
     private void SelectionTimer_Elapsed(object sender, ElapsedEventArgs e)
     {
       if (isSpeckleClosed == true)
       {
-        pluginCallback.Finish(0);
+        CSiAPIv1.Finish(0);
       }
     }
 
@@ -98,10 +98,10 @@ namespace SpeckleConnectorSAP2000
     public void Main(ref cSapModel SapModel, ref cPluginCallback ISapPlugin)
     {
       cSapModel model;
-      pluginCallback = ISapPlugin;
+      CSiAPIv1 = ISapPlugin;
       AppDomain.CurrentDomain.AssemblyResolve += new ResolveEventHandler(OnAssemblyResolve);
       AppDomain.CurrentDomain.ResourceResolve += new ResolveEventHandler(OnAssemblyResolve);
-      Setup.Init(ConnectorSAP2000Utils.SAP2000AppName);
+      Setup.Init(ConnectorSAP2000Utils.SAP2000AppName,"SAP2000");
       try
       {
         cHelper helper = new Helper();

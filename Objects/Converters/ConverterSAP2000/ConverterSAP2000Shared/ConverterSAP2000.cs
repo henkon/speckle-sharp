@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using System.Linq;
-using SAP2000v1;
+using CSiAPIv1;
 using Speckle.Core.Kits;
 using Speckle.Core.Models;
 using BE = Objects.BuiltElements;
@@ -18,10 +18,10 @@ namespace Objects.Converter.SAP2000
 {
   public partial class ConverterSAP2000 : ISpeckleConverter
   {
-#if SAP2000V18
-    public static string SAP2000AppName = Applications.SAP2000v18;
-#elif SAP2000V19
-    public static string SAP2000AppName = Applications.SAP2000v19;
+#if CSiAPIv18
+    public static string SAP2000AppName = Applications.CSiAPIv18;
+#elif CSiAPIv19
+    public static string SAP2000AppName = Applications.CSiAPIv19;
 #else
     public static string SAP2000AppName = Applications.SAP2000;
 #endif

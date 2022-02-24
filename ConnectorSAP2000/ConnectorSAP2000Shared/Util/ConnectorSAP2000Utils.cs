@@ -5,7 +5,7 @@ using Speckle.Core.Kits;
 using Speckle.Core.Logging;
 using System.Linq;
 using Speckle.ConnectorSAP2000.UI;
-using SAP2000v1;
+using CSiAPIv1;
 
 namespace Speckle.ConnectorSAP2000.Util
 {

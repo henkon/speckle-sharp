@@ -11,7 +11,7 @@ using Objects.Structural.Loading;
 using Speckle.Core.Models;
 
 using System.Linq;
-using SAP2000v1;
+using CSiAPIv1;
 
 namespace Objects.Converter.SAP2000
 {

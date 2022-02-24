@@ -5,8 +5,8 @@ using DesktopUI2.Models;
 using Speckle.Core.Models;
 using Speckle.ConnectorSAP2000.Util;
 using System.Timers;
-using SAP2000v1;
-
+using CSiAPIv1;
+using DesktopUI2.Models.Settings;
 
 namespace Speckle.ConnectorSAP2000.UI
 {
@@ -17,6 +17,7 @@ namespace Speckle.ConnectorSAP2000.UI
 
     public Timer SelectionTimer;
     public List<StreamState> DocumentStreams { get; set; } = new List<StreamState>();
+
 
 
     public ConnectorBindingsSAP2000(cSapModel model)
@@ -62,6 +63,16 @@ namespace Speckle.ConnectorSAP2000.UI
     public override string GetHostAppName() => ConnectorSAP2000Utils.SAP2000AppName;
 
     public override List<string> GetObjectsInView()
+    {
+      throw new NotImplementedException();
+    }
+
+    public override string GetHostAppNameVersion()
+    {
+      throw new NotImplementedException();
+    }
+
+    public override List<ISetting> GetSettings()
     {
       throw new NotImplementedException();
     }

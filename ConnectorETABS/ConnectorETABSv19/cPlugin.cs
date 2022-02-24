@@ -159,7 +159,7 @@ namespace SpeckleConnectorETABS
       model = SapModel;
       pluginCallback = ISapPlugin;
       AppDomain.CurrentDomain.AssemblyResolve += new ResolveEventHandler(OnAssemblyResolve);
-      Setup.Init(ConnectorETABSUtils.ETABSAppName);
+      Setup.Init(ConnectorETABSUtils.ETABSAppName,"ETABS");
       try
       {
         cHelper helper = new Helper();

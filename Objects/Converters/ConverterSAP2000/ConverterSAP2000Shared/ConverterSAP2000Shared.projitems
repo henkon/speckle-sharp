@@ -9,9 +9,6 @@
     <Import_RootNamespace>ConverterSAP2000Shared</Import_RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <Folder Include="$(MSBuildThisFileDirectory)Partial Classes\Results\" />
-  </ItemGroup>
-  <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)ConverterSAP2000.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ConverterSAP2000Utils.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Partial Classes\Analysis\ConvertModel.cs" />
@@ -27,5 +24,10 @@
     <Compile Include="$(MSBuildThisFileDirectory)Partial Classes\Materials\ConvertMaterials.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Partial Classes\Properties\Convert1DProperty.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Partial Classes\Properties\Convert2DProperty.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Partial Classes\Results\ConvertResultGlobal.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Partial Classes\Results\ConvertResultNodes.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Partial Classes\Results\ConvertResults.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Partial Classes\Results\ConvertResultSet1D.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Partial Classes\Results\ConvertResultSet2D.cs" />
   </ItemGroup>
 </Project>

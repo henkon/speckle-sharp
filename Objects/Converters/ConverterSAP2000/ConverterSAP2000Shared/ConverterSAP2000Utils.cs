@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using Objects.Structural.Geometry;
-using SAP2000v1;
+using CSiAPIv1;
 using System.Linq;
 
 namespace Objects.Converter.SAP2000
