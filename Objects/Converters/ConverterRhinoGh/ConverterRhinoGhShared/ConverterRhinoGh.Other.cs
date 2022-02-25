@@ -9,20 +9,96 @@ using Speckle.Core.Models;
 using Speckle.Core.Kits;
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Linq;
 using BlockDefinition = Objects.Other.BlockDefinition;
 using BlockInstance = Objects.Other.BlockInstance;
+using DisplayStyle = Objects.Other.DisplayStyle;
 using Hatch = Objects.Other.Hatch;
 using HatchLoop = Objects.Other.HatchLoop;
 using Polyline = Objects.Geometry.Polyline;
 using Text = Objects.Other.Text;
 using RH = Rhino.DocObjects;
+using RenderMaterial = Objects.Other.RenderMaterial;
 using Rhino;
 
 namespace Objects.Converter.RhinoGh
 {
   public partial class ConverterRhinoGh
   {
+    public ObjectAttributes DisplayStyleToNative(DisplayStyle display)
+    {
+      var attributes = new ObjectAttributes();
+
+      attributes.ColorSource = ObjectColorSource.ColorFromObject;
+      attributes.ObjectColor = System.Drawing.Color.FromArgb(display.color);
+      attributes.PlotWeight = display.lineweight;
+      attributes.LinetypeSource = ObjectLinetypeSource.LinetypeFromObject;
+      var lineStyle = Doc.Linetypes.FindName(display.linetype);
+      attributes.LinetypeIndex = (lineStyle != null) ? lineStyle.Index : 0;
+
+      return attributes;
+    }
+
+    public DisplayStyle DisplayStyleToSpeckle(ObjectAttributes attributes)
+    {
+      var style = new DisplayStyle();
+
+      style.color = attributes.DrawColor(Doc).ToArgb();
+      var lineType = Doc.Linetypes[attributes.LinetypeIndex];
+      if (lineType.HasName)
+        style.linetype = lineType.Name;
+      style.lineweight = attributes.PlotWeight;
+
+      return style;
+    }
+
+    public Rhino.Render.RenderMaterial RenderMaterialToNative(RenderMaterial speckleMaterial)
+    {
+      var commitInfo = GetCommitInfo();
+      var speckleName = $"{commitInfo} - {speckleMaterial.name}";
+      
+      // check if the doc already has a material with speckle material name, or a previously created speckle material
+      var existing = Doc.RenderMaterials.FirstOrDefault(x => x.Name == speckleMaterial.name);
+      if (existing != null)
+        return existing;
+      else
+        existing = Doc.RenderMaterials.FirstOrDefault(x => x.Name == speckleName);
+      if (existing != null)
+        return existing;
+      
+      var rhinoMaterial = new Material
+      {
+        Name = speckleName,
+        DiffuseColor = Color.FromArgb(speckleMaterial.diffuse),
+        EmissionColor = Color.FromArgb(speckleMaterial.emissive),
+        Transparency = 1 - speckleMaterial.opacity,
+        Reflectivity = speckleMaterial.metalness
+      };
+      
+      var renderMaterial = Rhino.Render.RenderMaterial.CreateBasicMaterial(rhinoMaterial, Doc);
+      Doc.RenderMaterials.Add(renderMaterial);
+
+      return renderMaterial;
+    }
+    public RenderMaterial RenderMaterialToSpeckle(Material material)
+    {
+      var renderMaterial = new RenderMaterial();
+      if (material == null) return renderMaterial;
+
+      renderMaterial.name = (material.Name == null) ? "default" : material.Name; // default rhino material has no name or id
+      renderMaterial.diffuse = material.DiffuseColor.ToArgb();
+      renderMaterial.emissive = material.EmissionColor.ToArgb();
+      renderMaterial.opacity = 1 - material.Transparency;
+      renderMaterial.metalness = material.Reflectivity;
+
+      // for some reason some default material transparency props are 1 when they shouldn't be - use this hack for now
+      if ((renderMaterial.name.ToLower().Contains("glass") || renderMaterial.name.ToLower().Contains("gem")) && renderMaterial.opacity == 0)
+        renderMaterial.opacity = 0.3;
+
+      return renderMaterial;
+    }
+
     public Rhino.Geometry.Hatch[] HatchToNative(Hatch hatch)
     {
 
@@ -142,10 +218,23 @@ namespace Objects.Converter.RhinoGh
           int index = 1;
           if (layerName != null)
             GetLayer(Doc, layerName, out index, true);
-          var attribute = new ObjectAttributes()
+
+          var attribute = new ObjectAttributes();
+          if (geo[@"displayStyle"] is Base display)
           {
-            LayerIndex = index
-          };
+            if (ConvertToNative(display) is ObjectAttributes displayAttribute)
+              attribute = displayAttribute;
+          }
+          else if (geo[@"renderMaterial"] is Base renderMaterial)
+          {
+            if (renderMaterial["diffuse"] is int color)
+            {
+              attribute.ColorSource = ObjectColorSource.ColorFromObject;
+              attribute.ObjectColor = Color.FromArgb(color);
+            }
+          }
+          attribute.LayerIndex = index;
+
           geometry.AddRange(converted);
           attributes.Add(attribute);
         }
@@ -176,7 +265,7 @@ namespace Objects.Converter.RhinoGh
 
       var _instance = new BlockInstance()
       {
-        transform = transformArray,
+        transform = new Other.Transform(transformArray, ModelUnits),
         blockDefinition = def,
         units = ModelUnits
       };
@@ -192,7 +281,7 @@ namespace Objects.Converter.RhinoGh
       // get the transform
       // rhino doesn't seem to handle transform matrices where the translation vector last value is a divisor instead of 1, so make sure last value is set to 1
       Transform transform = Transform.Identity;
-      double[] t = instance.transform;
+      double[] t = instance.transform.value;
       if (t.Length == 16)
       {
         int count = 0;

@@ -19,8 +19,6 @@ namespace Speckle.ConnectorRevit.UI
 {
   public partial class ConnectorBindingsRevit2
   {
-
-
     //TODO: store these string values in something more solid to avoid typos?
     public override List<ISelectionFilter> GetSelectionFilters()
     {
@@ -138,7 +136,7 @@ namespace Speckle.ConnectorRevit.UI
             var viewElements = new FilteredElementCollector(doc, view.Id)
               .WhereElementIsNotElementType()
               .WhereElementIsViewIndependent()
-              .Where(x => x.IsPhysicalElement())
+              //.Where(x => x.IsPhysicalElement())
               .Where(x => !ids.Contains(x.UniqueId)) //exclude elements already added from other views
               .ToList();
 

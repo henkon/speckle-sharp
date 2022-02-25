@@ -25,14 +25,14 @@ namespace Objects.Converter.Revit
       }
 
       speckleElement.category = revitElement.Category.Name;
-      speckleElement.displayMesh = GetElementDisplayMesh(revitElement, new Options() { DetailLevel = ViewDetailLevel.Fine, ComputeReferences = false });
+      speckleElement.displayValue = GetElementDisplayMesh(revitElement, new Options() { DetailLevel = ViewDetailLevel.Fine, ComputeReferences = false });
 
       //Only send elements that have a mesh, if not we should probably support them properly via direct conversions
-      if (speckleElement.displayMesh == null || !speckleElement.displayMesh.vertices.Any())
-        return null;
+      if (speckleElement.displayValue == null || speckleElement.displayValue.Count == 0)
+        throw new Exception($"Skipped not supported type: {revitElement.GetType()}{GetElemInfo(revitElement)}");
 
       GetAllRevitParamsAndIds(speckleElement, revitElement);
-      Report.Log($"Converted Generic Element ({revitElement.Category.Name}) {revitElement.Id}");
+
       return speckleElement;
     }
   }

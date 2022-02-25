@@ -10,15 +10,14 @@ namespace Objects.Geometry
   public class Arc : Base, IHasBoundingBox, ICurve, IHasArea
   {
     public double? radius { get; set; }
+    public double? startAngle { get; set; }
 
-    public double? startAngle { get; set; } // deprecate this prop & turn into convenience method
-
-    public double? endAngle { get; set; } // deprecate this prop & turn into convenience method
+    public double? endAngle { get; set; }
 
     public double? angleRadians { get; set; }
 
     /// <summary>
-    /// Gets or sets the plane of the <see cref="Arc"/>. The plane origin is the <see cref="Arc"/> center. Normal should be oriented so that arc is counterclockwise.
+    /// Gets or sets the plane of the <see cref="Arc"/>. The plane origin is the <see cref="Arc"/> center.
     /// </summary>
     public Plane plane { get; set; }
 

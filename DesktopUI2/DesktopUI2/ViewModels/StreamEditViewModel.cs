@@ -1,14 +1,12 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Data;
 using Avalonia.Metadata;
 using DesktopUI2.Models;
-using DesktopUI2.Models.Filters;
+using DesktopUI2.Models.Settings;
 using DesktopUI2.Views;
-using Material.Dialog;
+using DesktopUI2.Views.Windows;
 using ReactiveUI;
 using Speckle.Core.Api;
-using Speckle.Core.Credentials;
 using Speckle.Core.Logging;
 using Splat;
 using System;
@@ -52,10 +50,8 @@ namespace DesktopUI2.ViewModels
       set
       {
         this.RaiseAndSetIfChanged(ref _selectedBranch, value);
-
         if (value != null)
           GetCommits();
-
       }
     }
 
@@ -81,8 +77,6 @@ namespace DesktopUI2.ViewModels
           else
             PreviewImageUrl = _streamState.Client.Account.serverInfo.url + $"/preview/{_streamState.StreamId}/commits/{_selectedCommit.id}";
         }
-
-
       }
     }
 
@@ -96,7 +90,6 @@ namespace DesktopUI2.ViewModels
         this.RaisePropertyChanged("HasCommits");
       }
     }
-
 
     private FilterViewModel _selectedFilter;
     public FilterViewModel SelectedFilter
@@ -114,20 +107,29 @@ namespace DesktopUI2.ViewModels
       }
     }
 
-
-    private List<FilterViewModel> _filters;
-    public List<FilterViewModel> Filters
+    private List<FilterViewModel> _availableFilters;
+    public List<FilterViewModel> AvailableFilters
     {
-      get => _filters;
-      private set => this.RaiseAndSetIfChanged(ref _filters, value);
+      get => _availableFilters;
+      private set => this.RaiseAndSetIfChanged(ref _availableFilters, value);
     }
 
+    private List<ISetting> _settings;
+    public List<ISetting> Settings
+    {
+      get => _settings;
+      private set
+      {
+        this.RaiseAndSetIfChanged(ref _settings, value);
+        this.RaisePropertyChanged("HasSettings");
+      }
+    }
+    public bool HasSettings => true; //AvailableSettings != null && AvailableSettings.Any();
     public bool HasCommits => Commits != null && Commits.Any();
 
     #endregion
 
     private StreamState _streamState { get; }
-
 
     public string _previewImageUrl = "";
     public string PreviewImageUrl
@@ -140,18 +142,12 @@ namespace DesktopUI2.ViewModels
       }
     }
 
-
-
-
     private Avalonia.Media.Imaging.Bitmap _previewImage = null;
     public Avalonia.Media.Imaging.Bitmap PreviewImage
     {
       get => _previewImage;
       set => this.RaiseAndSetIfChanged(ref _previewImage, value);
     }
-
-
-
 
     public StreamEditViewModel()
     {
@@ -164,18 +160,19 @@ namespace DesktopUI2.ViewModels
       Client = streamState.Client;
       _streamState = streamState; //cached, should not be accessed
 
-
       //use dependency injection to get bindings
       Bindings = Locator.Current.GetService<ConnectorBindings>();
 
       //get available filters from our bindings
-      Filters = new List<FilterViewModel>(Bindings.GetSelectionFilters().Select(x => new FilterViewModel(x)));
-      SelectedFilter = Filters[0];
-      IsReceiver = streamState.IsReceiver;
+      AvailableFilters = new List<FilterViewModel>(Bindings.GetSelectionFilters().Select(x => new FilterViewModel(x)));
+      SelectedFilter = AvailableFilters[0];
 
+      //get available settings from our bindings
+      Settings = Bindings.GetSettings();
+
+      IsReceiver = streamState.IsReceiver;
       GetBranchesAndRestoreState(streamState.Client, streamState);
     }
-
 
     private async void GetBranchesAndRestoreState(Client client, StreamState streamState)
     {
@@ -191,9 +188,18 @@ namespace DesktopUI2.ViewModels
 
       if (streamState.Filter != null)
       {
-        SelectedFilter = Filters.FirstOrDefault(x => x.Filter.Slug == streamState.Filter.Slug);
+        SelectedFilter = AvailableFilters.FirstOrDefault(x => x.Filter.Slug == streamState.Filter.Slug);
         if (SelectedFilter != null)
           SelectedFilter.Filter = streamState.Filter;
+      }
+      if (streamState.Settings != null)
+      {
+        foreach (var setting in Settings)
+        {
+          var savedSetting = streamState.Settings.Where(o => o.Slug == setting.Slug).First();
+          if (savedSetting != null)
+            setting.Selection = savedSetting.Selection;
+        }
       }
     }
 
@@ -208,9 +214,8 @@ namespace DesktopUI2.ViewModels
         _streamState.CommitId = SelectedCommit.id;
       if (!IsReceiver)
         _streamState.Filter = SelectedFilter.Filter;
+      _streamState.Settings = Settings.Select(o => o).ToList();
       return _streamState;
-
-
     }
 
     private async void GetCommits()
@@ -228,12 +233,6 @@ namespace DesktopUI2.ViewModels
         Commits = new List<Commit>();
         SelectedCommit = null;
       }
-      //else
-      //{
-      //  Commits = new List<Commit>() { new Commit { id = "latest", message = "This branch has no commits." } };
-      //}
-
-
     }
 
     public void DownloadImage(string url)
@@ -263,7 +262,6 @@ namespace DesktopUI2.ViewModels
         System.Diagnostics.Debug.WriteLine(ex);
         PreviewImageUrl = null; // Could not download...
       }
-
     }
 
     #region commands
@@ -272,54 +270,119 @@ namespace DesktopUI2.ViewModels
     {
       MainWindowViewModel.RouterInstance.Navigate.Execute(HomeViewModel.Instance);
       HomeViewModel.Instance.AddSavedStream(GetStreamState());
+
       if (IsReceiver)
+      {
         Tracker.TrackPageview(Tracker.RECEIVE_ADDED);
-      else Tracker.TrackPageview(Tracker.SEND_ADDED);
+        Analytics.TrackEvent(Client.Account, Analytics.Events.DUIAction, new Dictionary<string, object>() { { "name", "Stream Receiver Add" } });
+      }
+
+      else
+      {
+        Tracker.TrackPageview(Tracker.SEND_ADDED);
+        Analytics.TrackEvent(Client.Account, Analytics.Events.DUIAction, new Dictionary<string, object>() { { "name", "Stream Sender Add" } });
+      }
     }
 
     private async void SendCommand()
     {
-      Progress = new ProgressViewModel();
-      Progress.IsProgressing = true;
-      var dialog = Dialogs.SendReceiveDialog("Sending...", this);
 
-
-      _ = dialog.ShowDialog(MainWindow.Instance).ContinueWith(x =>
+      try
       {
-        if (x.Result.GetResult == "cancel")
-          Progress.CancellationTokenSource.Cancel();
+        Progress = new ProgressViewModel();
+        Progress.IsProgressing = true;
+        var dialog = Dialogs.SendReceiveDialog("Sending...", this);
+
+        _ = dialog.ShowDialog(MainWindow.Instance).ContinueWith(x =>
+        {
+          if (x.Result.GetResult == "cancel")
+            Progress.CancellationTokenSource.Cancel();
+        }
+          );
+        await Task.Run(() => Bindings.SendStream(GetStreamState(), Progress));
+        dialog.GetWindow().Close();
+        Progress.IsProgressing = false;
+
+        if (!Progress.CancellationTokenSource.IsCancellationRequested)
+        {
+          Analytics.TrackEvent(Client.Account, Analytics.Events.Send);
+          Tracker.TrackPageview(Tracker.SEND);
+        }
+
+        //TODO: display other dialog if operation failed etc
+        MainWindowViewModel.RouterInstance.Navigate.Execute(HomeViewModel.Instance);
+
       }
-        );
-      await Task.Run(() => Bindings.SendStream(GetStreamState(), Progress));
-      dialog.GetWindow().Close();
-      Progress.IsProgressing = false;
-      MainWindowViewModel.RouterInstance.Navigate.Execute(HomeViewModel.Instance);
+      catch (Exception ex)
+      {
+
+      }
     }
 
     private async void ReceiveCommand()
     {
-      Progress = new ProgressViewModel();
-      Progress.IsProgressing = true;
-      var dialog = Dialogs.SendReceiveDialog("Receiving...", this);
-
-
-      _ = dialog.ShowDialog(MainWindow.Instance).ContinueWith(x =>
+      try
       {
-        if (x.Result.GetResult == "cancel")
-          Progress.CancellationTokenSource.Cancel();
+        Progress = new ProgressViewModel();
+        Progress.IsProgressing = true;
+        var dialog = Dialogs.SendReceiveDialog("Receiving...", this);
+
+        _ = dialog.ShowDialog(MainWindow.Instance).ContinueWith(x =>
+        {
+          if (x.Result.GetResult == "cancel")
+            Progress.CancellationTokenSource.Cancel();
+        });
+
+        await Task.Run(() => Bindings.ReceiveStream(GetStreamState(), Progress));
+        dialog.GetWindow().Close();
+        Progress.IsProgressing = false;
+
+        if (!Progress.CancellationTokenSource.IsCancellationRequested)
+        {
+          Analytics.TrackEvent(Client.Account, Analytics.Events.Send);
+          Tracker.TrackPageview(Tracker.SEND);
+        }
+
+        //TODO: display other dialog if operation failed etc
+        MainWindowViewModel.RouterInstance.Navigate.Execute(HomeViewModel.Instance);
       }
-        );
-      await Task.Run(() => Bindings.ReceiveStream(GetStreamState(), Progress));
-      dialog.GetWindow().Close();
-      Progress.IsProgressing = false;
-      //TODO: display other dialog if operation failed etc
-      MainWindowViewModel.RouterInstance.Navigate.Execute(HomeViewModel.Instance);
+      catch (Exception ex)
+      {
+
+      }
+    }
+
+    private async void OpenSettingsCommand()
+    {
+      try
+      {
+        var settingsWindow = new Settings();
+        settingsWindow.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+
+        // Not doing this causes Avalonia to throw an error about the owner being already set on the Setting View UserControl
+        Settings.ForEach(x => x.ResetView());
+
+        var settingsPageViewModel = new SettingsPageViewModel(Settings.Select(x => new SettingViewModel(x)).ToList());
+        settingsWindow.DataContext = settingsPageViewModel;
+        settingsWindow.Title = $"Settings for {Stream.name}";
+
+        var saveResult = await settingsWindow.ShowDialog<bool?>(MainWindow.Instance); // TODO: debug throws "control already has a visual parent exception" when calling a second time
+
+        if (saveResult != null && (bool)saveResult)
+        {
+          Settings = settingsPageViewModel.Settings.Select(x => x.Setting).ToList();
+        }
+      }
+      catch (Exception e)
+      {
+      }
     }
 
     private void SaveSendCommand()
     {
       MainWindowViewModel.RouterInstance.Navigate.Execute(HomeViewModel.Instance);
       HomeViewModel.Instance.AddSavedStream(GetStreamState(), true);
+      Analytics.TrackEvent(Client.Account, Analytics.Events.DUIAction, new Dictionary<string, object>() { { "name", "Stream Sender Add" }, { "filter", SelectedFilter.Filter.Name } });
       Tracker.TrackPageview(Tracker.SEND_ADDED);
     }
 
@@ -327,6 +390,7 @@ namespace DesktopUI2.ViewModels
     {
       MainWindowViewModel.RouterInstance.Navigate.Execute(HomeViewModel.Instance);
       HomeViewModel.Instance.AddSavedStream(GetStreamState(), false, true);
+      Analytics.TrackEvent(Client.Account, Analytics.Events.DUIAction, new Dictionary<string, object>() { { "name", "Stream Receiver Add" } });
       Tracker.TrackPageview(Tracker.RECEIVE_ADDED);
     }
 

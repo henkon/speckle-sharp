@@ -106,6 +106,8 @@ namespace Speckle.ConnectorDynamo.ViewNode
         return;
       }
 
+      Analytics.TrackEvent(Analytics.Events.NodeRun, new Dictionary<string, object>() { { "name", "Stream View" } });
+
       Process.Start(Url);
     }
 
@@ -152,7 +154,7 @@ namespace Speckle.ConnectorDynamo.ViewNode
 
       if (inputMirror == null || inputMirror.GetData() == null) return null;
 
-      var data = inputMirror.GetData().Data.ToString();
+      var data = inputMirror.GetData().Data?.ToString();
 
       return data;
     }

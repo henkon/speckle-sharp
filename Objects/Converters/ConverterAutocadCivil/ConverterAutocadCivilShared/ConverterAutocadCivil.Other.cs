@@ -16,11 +16,116 @@ using Text = Objects.Other.Text;
 using Speckle.Core.Models;
 using Speckle.Core.Kits;
 using Autodesk.AutoCAD.Windows.Data;
+using Objects.Other;
+using Autodesk.AutoCAD.Colors;
 
 namespace Objects.Converter.AutocadCivil
 {
   public partial class ConverterAutocadCivil
   {
+    // Display Style
+    private static LineWeight GetLineWeight(double weight)
+    {
+      double hundredthMM = weight * 100;
+      var weights = Enum.GetValues(typeof(LineWeight)).Cast<int>().ToList();
+      int closest = weights.Aggregate((x, y) => Math.Abs(x - hundredthMM) < Math.Abs(y - hundredthMM) ? x : y);
+      return (LineWeight)closest;
+    }
+    public Entity DisplayStyleToNative(Base styleBase, Entity entity)
+    {
+      var color = new System.Drawing.Color();
+      if (styleBase is DisplayStyle style)
+      {
+        color = System.Drawing.Color.FromArgb(style.color);
+        entity.LineWeight = GetLineWeight(style.lineweight);
+        if (LineTypeDictionary.ContainsKey(style.linetype))
+          entity.LinetypeId = LineTypeDictionary[style.linetype];
+      }
+      else if (styleBase is RenderMaterial material) // this is the fallback value if a rendermaterial is passed instead
+      {
+        color = System.Drawing.Color.FromArgb(material.diffuse);
+      }
+      entity.Color = Color.FromRgb(color.R, color.G, color.B);
+      entity.Transparency = new Transparency(color.A);
+
+      return entity;
+    }
+    public DisplayStyle DisplayStyleToSpeckle(Entity entity)
+    {
+      var style = new DisplayStyle();
+      if (entity is null) return style;
+
+      // get color
+      int color = System.Drawing.Color.Black.ToArgb();
+      switch (entity.Color.ColorMethod)
+      {
+        case ColorMethod.ByLayer:
+          using (Transaction tr = Doc.Database.TransactionManager.StartTransaction())
+          {
+            if (entity.LayerId.IsValid)
+            {
+              var layer = tr.GetObject(entity.LayerId, OpenMode.ForRead) as LayerTableRecord;
+              color = layer.Color.ColorValue.ToArgb();
+            }
+            tr.Commit();
+          }
+          break;
+        case ColorMethod.ByBlock:
+        case ColorMethod.ByAci:
+        case ColorMethod.ByColor:
+          color = entity.Color.ColorValue.ToArgb();
+          break;
+      }
+      style.color = color;
+
+      // get linetype
+      style.linetype = entity.Linetype;
+      if (entity.Linetype.ToUpper() == "BYLAYER")
+      {
+        using (Transaction tr = Doc.Database.TransactionManager.StartTransaction())
+        {
+          if (entity.LayerId.IsValid)
+          {
+            var layer = tr.GetObject(entity.LayerId, OpenMode.ForRead) as LayerTableRecord;
+            var linetype = (LinetypeTableRecord)tr.GetObject(layer.LinetypeObjectId, OpenMode.ForRead);
+            style.linetype = linetype.Name;
+          }
+          tr.Commit();
+        }
+      }
+
+      // get lineweight
+      double lineWeight = 0.25;
+      switch (entity.LineWeight)
+      {
+        case LineWeight.ByLayer:
+          using (Transaction tr = Doc.Database.TransactionManager.StartTransaction())
+          {
+            if (entity.LayerId.IsValid)
+            {
+              var layer = tr.GetObject(entity.LayerId, OpenMode.ForRead) as LayerTableRecord;
+              if (layer.LineWeight == LineWeight.ByLineWeightDefault || layer.LineWeight == LineWeight.ByBlock)
+                lineWeight = (int)LineWeight.LineWeight025;
+              else
+                lineWeight = (int)layer.LineWeight;
+            }
+            tr.Commit();
+          }
+          break;
+        case LineWeight.ByBlock:
+        case LineWeight.ByLineWeightDefault:
+        case LineWeight.ByDIPs:
+          lineWeight = (int)LineWeight.LineWeight025;
+          break;
+        default:
+          lineWeight = (int)entity.LineWeight;
+          break;
+      }
+      style.lineweight = lineWeight / 100; // convert to mm
+
+      return style;
+    }
+
     // Hatches
     private HatchLoopType HatchLoopTypeToSpeckle(HatchLoopTypes type)
     {
@@ -168,9 +273,11 @@ namespace Objects.Converter.AutocadCivil
     // Blocks
     public BlockInstance BlockReferenceToSpeckle(BlockReference reference)
     {
+      /*
       // skip if dynamic block
       if (reference.IsDynamicBlock)
         return null;
+      */
 
       // get record
       BlockDefinition definition = null;
@@ -189,14 +296,13 @@ namespace Objects.Converter.AutocadCivil
 
       var instance = new BlockInstance()
       {
-        transform = reference.BlockTransform.ToArray(),
+        transform = new Transform( reference.BlockTransform.ToArray(), ModelUnits ),
         blockDefinition = definition,
         units = ModelUnits
       };
-      
+
       // add attributes
-      foreach (var attribute in attributes)
-        instance[attribute.Key] = attribute.Value;
+      instance["attributes"] = attributes;
 
       return instance;
     }
@@ -214,7 +320,7 @@ namespace Objects.Converter.AutocadCivil
       Point3d insertionPoint = PointToNative(instance.GetInsertionPoint());
 
       // transform
-      double[] transform = instance.transform;
+      double[] transform = instance.transform.value;
       for (int i = 3; i < 12; i += 4)
         transform[i] = ScaleToNative(transform[i], instance.units);
       Matrix3d convertedTransform = new Matrix3d(transform);
@@ -223,6 +329,12 @@ namespace Objects.Converter.AutocadCivil
       BlockTableRecord modelSpaceRecord = Doc.Database.GetModelSpace();
       BlockReference br = new BlockReference(insertionPoint, definitionId);
       br.BlockTransform = convertedTransform;
+      // add attributes if there are any
+      var attributes = instance["attributes"] as Dictionary<string, string>;
+      if (attributes != null)
+      {
+        // TODO: figure out how to add attributes
+      }
       ObjectId id = ObjectId.Null;
       if (AppendToModelSpace)
         id = modelSpaceRecord.Append(br);
@@ -270,7 +382,7 @@ namespace Objects.Converter.AutocadCivil
     public ObjectId BlockDefinitionToNativeDB(BlockDefinition definition)
     {
       // get modified definition name with commit info
-      var blockName = $"{Doc.UserData["commit"]} - {RemoveInvalidChars(definition.name)}";
+      var blockName = RemoveInvalidAutocadChars($"{Doc.UserData["commit"]} - {definition.name}");
 
       ObjectId blockId = ObjectId.Null;
 
@@ -292,26 +404,41 @@ namespace Objects.Converter.AutocadCivil
         var bakedGeometry = new ObjectIdCollection(); // this is to contain block def geometry that is already added to doc space during conversion
         foreach (var geo in definition.geometry)
         {
+          List<Entity> converted = new List<Entity>();
+          DisplayStyle style = geo["displayStyle"] as DisplayStyle;
+          RenderMaterial material = geo["renderMaterial"] as RenderMaterial;
           if (CanConvertToNative(geo))
           {
-            Entity converted = null;
             switch (geo)
             {
               case BlockInstance o:
                 BlockInstanceToNativeDB(o, out BlockReference reference, false);
-                converted = reference;
+                if (reference != null) converted.Add(reference);
                 break;
               default:
-                converted = ConvertToNative(geo) as Entity;
+                ConvertWithDisplay(geo, style, material, ref converted);
                 break;
             }
-
-            if (converted == null)
-              continue;
-            else if (!converted.IsNewObject && !(converted is BlockReference))
-              bakedGeometry.Add(converted.Id);
+          }
+          else if (geo["displayValue"] != null)
+          {
+            switch (geo["displayValue"])
+            {
+              case Base o:
+                ConvertWithDisplay(o, style, material, ref converted, true);
+                break;
+              case IReadOnlyList<Base> o:
+                foreach (Base displayValue in o)
+                  ConvertWithDisplay(displayValue, style, material, ref converted, true);
+                break;
+            }
+          }
+          foreach (var convertedItem in converted)
+          {
+            if (!convertedItem.IsNewObject && !(convertedItem is BlockReference))
+              bakedGeometry.Add(convertedItem.Id);
             else
-              btr.AppendEntity(converted);
+              btr.AppendEntity(convertedItem);
           }
         }
         blockId = blckTbl.Add(btr);
@@ -320,8 +447,18 @@ namespace Objects.Converter.AutocadCivil
         blckTbl.Dispose();
       }
 
-
       return blockId;
+    }
+    private void ConvertWithDisplay(Base obj, DisplayStyle style, RenderMaterial material, ref List<Entity> converted, bool TryUseObjDisplay = false)
+    {
+      if (TryUseObjDisplay && obj["displayStyle"] as DisplayStyle != null) style = obj["displayStyle"] as DisplayStyle;
+      if (TryUseObjDisplay && obj["renderMaterial"] as RenderMaterial != null) material = obj["renderMaterial"] as RenderMaterial;
+      var convertedGeo = ConvertToNative(obj) as Entity;
+      if (convertedGeo != null)
+      {
+        convertedGeo = (style != null) ? DisplayStyleToNative(style, convertedGeo) : DisplayStyleToNative(material, convertedGeo);
+        converted.Add(convertedGeo);
+      }
     }
 
     // Text

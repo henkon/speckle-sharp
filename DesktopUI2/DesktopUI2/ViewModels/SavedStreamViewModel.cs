@@ -1,20 +1,16 @@
-﻿using Avalonia.Controls;
-using DesktopUI2.Models;
+﻿using DesktopUI2.Models;
 using DesktopUI2.Views;
 using DesktopUI2.Views.Windows;
 using DynamicData;
 using Material.Icons;
 using Material.Icons.Avalonia;
 using ReactiveUI;
-using Speckle.Core.Api;
 using Speckle.Core.Logging;
 using Splat;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Reactive;
-using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Input;
 
@@ -77,7 +73,6 @@ namespace DesktopUI2.ViewModels
     public bool ShowNotification
     {
       get => !string.IsNullOrEmpty(Notification);
-
     }
 
     private string Url { get => $"{StreamState.ServerUrl.TrimEnd('/')}/streams/{StreamState.StreamId}/branches/{StreamState.BranchName}"; }
@@ -114,7 +109,7 @@ namespace DesktopUI2.ViewModels
         new MenuItemViewModel (EditSavedStreamCommand, "Edit",  MaterialIconKind.Cog),
         new MenuItemViewModel (ViewOnlineSavedStreamCommand, "View online",  MaterialIconKind.ExternalLink),
         new MenuItemViewModel (CopyStreamURLCommand, "Copy URL to clipboard",  MaterialIconKind.ContentCopy),
-        new MenuItemViewModel (OpenReportCommand, "Open Report",  MaterialIconKind.TextBox),
+        new MenuItemViewModel (OpenReportCommand, "Open Report",  MaterialIconKind.TextBox)
       };
       var customMenues = Bindings.GetCustomStreamMenuItems();
       if (customMenues != null)
@@ -165,6 +160,7 @@ namespace DesktopUI2.ViewModels
     {
       MainWindowViewModel.RouterInstance.Navigate.Execute(new StreamEditViewModel(HostScreen, StreamState));
       Tracker.TrackPageview("stream", "edit");
+      Analytics.TrackEvent(Analytics.Events.DUIAction, new Dictionary<string, object>() { { "name", "Stream Edit" } });
     }
 
     public void ViewOnlineSavedStreamCommand()
@@ -172,41 +168,57 @@ namespace DesktopUI2.ViewModels
       //to open urls in .net core must set UseShellExecute = true
       Process.Start(new ProcessStartInfo(Url) { UseShellExecute = true });
       Tracker.TrackPageview(Tracker.STREAM_VIEW);
-
+      Analytics.TrackEvent(Analytics.Events.DUIAction, new Dictionary<string, object>() { { "name", "Stream View" } });
     }
 
     public void CopyStreamURLCommand()
     {
       Avalonia.Application.Current.Clipboard.SetTextAsync(Url);
-      Tracker.TrackPageview("stream", "copy-link");
-
+      Analytics.TrackEvent(Analytics.Events.DUIAction, new Dictionary<string, object>() { { "name", "Stream Copy Link" } });
     }
 
     public async void SendCommand()
     {
+      Notification = "";
       Progress = new ProgressViewModel();
       Progress.IsProgressing = true;
       await Task.Run(() => Bindings.SendStream(StreamState, Progress));
       Progress.IsProgressing = false;
-      LastUsed = DateTime.Now.ToString();
-      Tracker.TrackPageview(Tracker.SEND);
+
+      if (!Progress.CancellationTokenSource.IsCancellationRequested)
+      {
+        LastUsed = DateTime.Now.ToString();
+        Analytics.TrackEvent(StreamState.Client.Account, Analytics.Events.Send);
+        Tracker.TrackPageview(Tracker.SEND);
+      }
 
       if (Progress.Report.ConversionErrorsCount > 0 || Progress.Report.OperationErrorsCount > 0)
         Notification = "Something went wrong, please check the report.";
-
-
     }
 
     public async void ReceiveCommand()
     {
+      Notification = "";
       Progress = new ProgressViewModel();
       Progress.IsProgressing = true;
       await Task.Run(() => Bindings.ReceiveStream(StreamState, Progress));
       Progress.IsProgressing = false;
-      LastUsed = DateTime.Now.ToString();
+
+      if (!Progress.CancellationTokenSource.IsCancellationRequested)
+      {
+        LastUsed = DateTime.Now.ToString();
+        Analytics.TrackEvent(StreamState.Client.Account, Analytics.Events.Receive);
+        Tracker.TrackPageview(Tracker.RECEIVE);
+      }
 
       if (Progress.Report.ConversionErrorsCount > 0 || Progress.Report.OperationErrorsCount > 0)
         Notification = "Something went wrong, please check the report.";
+    }
+
+    public void CancelSendOrReceive()
+    {
+      Progress.CancellationTokenSource.Cancel();
+      Analytics.TrackEvent(Analytics.Events.DUIAction, new Dictionary<string, object>() { { "name", "Cancel Send or Receive" } });
     }
 
     public void OpenReportCommand()
@@ -215,11 +227,8 @@ namespace DesktopUI2.ViewModels
       report.Title = $"Report of the last operation, {LastUsed.ToLower()}";
       report.DataContext = Progress;
       report.ShowDialog(MainWindow.Instance);
-
-
+      Analytics.TrackEvent(Analytics.Events.DUIAction, new Dictionary<string, object>() { { "name", "Open Report" } });
     }
-
-
 
   }
 }

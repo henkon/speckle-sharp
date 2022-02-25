@@ -2,16 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
-using System.Reflection;
 using Grasshopper.Kernel.Types;
 using Objects.Geometry;
 using Objects.Primitive;
-using Rhino;
-using Rhino.DocObjects;
+using Objects.Utils;
 using Rhino.Geometry;
 using Rhino.Geometry.Collections;
 using Speckle.Core.Kits;
-using Speckle.Core.Logging;
 using Speckle.Core.Models;
 using Arc = Objects.Geometry.Arc;
 using Box = Objects.Geometry.Box;
@@ -309,7 +306,6 @@ namespace Objects.Converter.RhinoGh
     }
 
     // Spiral
-    
     public RH.Curve SpiralToNative(Spiral s)
     {
       /* Using display value polyline for now
@@ -318,12 +314,10 @@ namespace Objects.Converter.RhinoGh
       var radiusPoint = PointToNative(s.startPoint).Location;
       var pitch = ScaleToNative(s.pitch, s.units);
       var endPoint = PointToNative(s.endPoint).Location;
-
       var r1 = axisStart.DistanceTo(radiusPoint);
       double r2 = 0;
       if (pitch == 0)
         r2 = axisStart.DistanceTo(endPoint);
-
       var nurbs = NurbsCurve.CreateSpiral(axisStart, axisDir, radiusPoint, pitch, s.turns, r1, r2);
       if (nurbs != null && nurbs.IsValid)
         if (nurbs.SetEndPoint(endPoint)) // try to adjust endpoint to match exactly the spiral endpoint
@@ -331,6 +325,7 @@ namespace Objects.Converter.RhinoGh
       */
       return PolylineToNative(s.displayValue);
     }
+
 
     // Polyline
     // Gh Capture
@@ -464,6 +459,9 @@ namespace Objects.Converter.RhinoGh
         case Ellipse ellipse:
           return EllipseToNative(ellipse);
 
+        case Spiral spiral:
+          return SpiralToNative(spiral);
+
         case Curve crv:
           return NurbsToNative(crv);
 
@@ -475,9 +473,6 @@ namespace Objects.Converter.RhinoGh
 
         case Polycurve polycurve:
           return PolycurveToNative(polycurve);
-
-        case Spiral spiral:
-          return SpiralToNative(spiral);
 
         default:
           return null;
@@ -696,8 +691,7 @@ namespace Objects.Converter.RhinoGh
       }
       m.TextureCoordinates.SetTextureCoordinates(textureCoordinates);
      
-
-      bool requiresCompacting = false;
+      
       int i = 0;
       while (i < mesh.faces.Count)
       {
@@ -717,52 +711,23 @@ namespace Objects.Converter.RhinoGh
         else
         {      
           // n-gon
-
-          var points = new List<Point3d>(n);
-          var indexMap = new Dictionary<Point3f, int>(n);
-          for (int j = 1; j <= n; j++)
+          var triangles = MeshTriangulationHelper.TriangulateFace(i, mesh, false);
+          
+          var faceIndices = new List<int>(triangles.Count);
+          for (int t = 0; t < triangles.Count; t += 3)
           {
-            int vertIndex = mesh.faces[i + j];
-            var (x, y, z) = mesh.GetPoint(vertIndex);
-            var key = (Point3f)new Point3d(x, y, z);
-        
-            points.Add(key);
-            if (!indexMap.ContainsKey(key))
-            {
-              indexMap.Add(key, vertIndex);
-            }
+            var face = new MeshFace(triangles[t], triangles[t + 1], triangles[t + 2]);
+            faceIndices.Add(m.Faces.AddFace(face));
           }
           
-          points.Add(points[0]);
-          
-          var subMesh = RH.Mesh.CreateFromClosedPolyline(new RH.Polyline(points));
-
-          var faceIndices = new List<int>(n);
-          if (subMesh != null)
-          {
-            foreach (var face in subMesh.Faces)
-            {
-              faceIndices.Add(m.Faces.Count);
-              m.Faces.AddFace(
-                indexMap[subMesh.Vertices[face.A]],
-                indexMap[subMesh.Vertices[face.B]],
-                indexMap[subMesh.Vertices[face.C]],
-                indexMap[subMesh.Vertices[face.D]]
-              );
-            }
-
-            MeshNgon ngon = MeshNgon.Create(mesh.faces.GetRange(i + 1, n), faceIndices);
-            m.Ngons.AddNgon(ngon);
-          
-            requiresCompacting = true;
-          }
+           MeshNgon ngon = MeshNgon.Create(mesh.faces.GetRange(i + 1, n), faceIndices);
+           m.Ngons.AddNgon(ngon);
         }
 
         i += n + 1;
       }
-
-      if (requiresCompacting) m.Compact();
-
+      m.Faces.CullDegenerateFaces();
+      
       return m;
     }
 
@@ -852,11 +817,18 @@ namespace Objects.Converter.RhinoGh
       // }
       // Create complex
       var joinedMesh = new RH.Mesh();
-      var mySettings = MeshingParameters.Minimal;
+      var mySettings = MeshingParameters.Default;
+      switch (SelectedMeshSettings)
+      {
+        case MeshSettings.Default:
+          mySettings = new MeshingParameters(0.05, 0.05);
+          break;
+        case MeshSettings.CurrentDoc:
+          mySettings = MeshingParameters.DocumentCurrentSetting(Doc);
+          break;
+      }
       joinedMesh.Append(RH.Mesh.CreateFromBrep(brep, mySettings));
       joinedMesh.Weld(Math.PI);
-      joinedMesh.Vertices.CombineIdentical(true, true);
-      joinedMesh.Compact();
 
       var spcklBrep = new Brep(displayValue: MeshToSpeckle(joinedMesh, u), provenance: RhinoAppName, units: u);
 

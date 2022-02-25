@@ -1,9 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using Autodesk.Revit.DB;
+﻿using Autodesk.Revit.DB;
 using Objects.BuiltElements.Revit;
 using Speckle.Core.Models;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using DB = Autodesk.Revit.DB;
 using Mesh = Objects.Geometry.Mesh;
 
@@ -16,7 +16,7 @@ namespace Objects.Converter.Revit
     {
       if (speckleWall.baseLine == null)
       {
-        throw new Speckle.Core.Logging.SpeckleException("Only line based Walls are currently supported.");
+        throw new Speckle.Core.Logging.SpeckleException($"Failed to create wall ${speckleWall.applicationId}. Only line based Walls are currently supported.");
       }
 
       var revitWall = GetExistingElementByApplicationId(speckleWall.applicationId) as DB.Wall;
@@ -28,12 +28,12 @@ namespace Objects.Converter.Revit
 
       if (speckleWall is RevitWall speckleRevitWall)
       {
-        level = LevelToNative(speckleRevitWall.level);
+        level = ConvertLevelToRevit(speckleRevitWall.level);
         structural = speckleRevitWall.structural;
       }
       else
       {
-        level = LevelToNative(LevelFromCurve(baseCurve));
+        level = ConvertLevelToRevit(LevelFromCurve(baseCurve));
       }
 
       //if it's a new element, we don't need to update certain properties
@@ -45,8 +45,7 @@ namespace Objects.Converter.Revit
       }
       if (revitWall == null)
       {
-        Report.LogConversionError(new Exception($"Failed to create wall ${speckleWall.applicationId}."));
-        return null;
+        throw new Speckle.Core.Logging.SpeckleException($"Failed to create wall ${speckleWall.applicationId}.");
       }
 
       //is structural update
@@ -69,7 +68,7 @@ namespace Objects.Converter.Revit
         var newz = baseCurve.GetEndPoint(0).Z;
         var offset = level.Elevation - newz;
         var newCurve = baseCurve;
-        if (Math.Abs(offset) > 0.0164042) // level and curve are not at the same height
+        if (Math.Abs(offset) > TOLERANCE) // level and curve are not at the same height
         {
           newCurve = baseCurve.CreateTransformed(Transform.CreateTranslation(new XYZ(0, 0, offset)));
         }
@@ -87,7 +86,7 @@ namespace Objects.Converter.Revit
 
         if (spklRevitWall.topLevel != null)
         {
-          var topLevel = LevelToNative(spklRevitWall.topLevel);
+          var topLevel = ConvertLevelToRevit(spklRevitWall.topLevel);
           TrySetParam(revitWall, BuiltInParameter.WALL_HEIGHT_TYPE, topLevel);
         }
         else
@@ -158,23 +157,27 @@ namespace Objects.Converter.Revit
             speckleWall.elements.Add(WallToSpeckle(wall));
         }
 
-        speckleWall.displayMesh = GetElementDisplayMesh(revitWall,
+        speckleWall.displayValue = GetElementDisplayMesh(revitWall,
           new Options() { DetailLevel = ViewDetailLevel.Fine, ComputeReferences = false });
       }
       else
       {
         // curtain walls have two meshes, one for panels and one for mullions
         // adding mullions as sub-elements so they can be correctly displayed in viewers etc
-        (var panelsMesh, var mullionsMesh) = GetCurtainWallDisplayMesh(revitWall);
+        var (panelsMesh, mullionsMesh) = GetCurtainWallDisplayMesh(revitWall);
         speckleWall["renderMaterial"] = new Other.RenderMaterial() { opacity = 0.2, diffuse = System.Drawing.Color.AliceBlue.ToArgb() };
-        speckleWall.displayMesh = panelsMesh;
+        speckleWall.displayValue = panelsMesh;
 
-        var mullions = new Base
+        var elements = new List<Base>();
+        if (mullionsMesh.Count > 0) //Only add mullions object if they have meshes 
         {
-          ["@displayMesh"] = mullionsMesh,
-          ["renderMaterial"] = new Other.RenderMaterial() { diffuse = System.Drawing.Color.DarkGray.ToArgb() }
-        };
-        speckleWall.elements = new List<Base> { mullions };
+          elements.Add(new Base
+          {
+            ["@displayValue"] = mullionsMesh
+          });
+        }
+
+        speckleWall.elements = elements;
 
       }
 
@@ -189,16 +192,14 @@ namespace Objects.Converter.Revit
       });
 
       GetHostedElements(speckleWall, revitWall);
-     //Report.Log($"Converted Wall {revitWall.Id}");
+      Report.Log($"Converted Wall {revitWall.Id}");
+
       return speckleWall;
     }
 
-    private (Mesh, Mesh) GetCurtainWallDisplayMesh(DB.Wall wall)
+    private (List<Mesh>, List<Mesh>) GetCurtainWallDisplayMesh(DB.Wall wall)
     {
       var grid = wall.CurtainGrid;
-
-      var meshPanels = new Mesh();
-      var meshMullions = new Mesh();
 
       var solidPanels = new List<Solid>();
       var solidMullions = new List<Solid>();
@@ -210,11 +211,9 @@ namespace Objects.Converter.Revit
       {
         solidMullions.AddRange(GetElementSolids(Doc.GetElement(mullionId)));
       }
-      (meshPanels.faces, meshPanels.vertices) = GetFaceVertexArrFromSolids(solidPanels);
-      (meshMullions.faces, meshMullions.vertices) = GetFaceVertexArrFromSolids(solidMullions);
-      meshPanels.units = ModelUnits;
-      meshMullions.units = ModelUnits;
 
+      var meshPanels = GetMeshesFromSolids(solidPanels);
+      var meshMullions = GetMeshesFromSolids(solidMullions);
 
       return (meshPanels, meshMullions);
     }

@@ -6,6 +6,7 @@ using System.Drawing;
 using Autodesk.AutoCAD.Geometry;
 using AcadGeo = Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.DatabaseServices;
+using Objects.Utils;
 using AcadBRep = Autodesk.AutoCAD.BoundaryRepresentation;
 using AcadDB = Autodesk.AutoCAD.DatabaseServices;
 
@@ -210,10 +211,7 @@ namespace Objects.Converter.AutocadCivil
     public Polyline RectangleToSpeckle(Rectangle3d rectangle)
     {
       var vertices = new List<Point3d>() { rectangle.LowerLeft, rectangle.LowerRight, rectangle.UpperLeft, rectangle.UpperRight };
-      var _polyline = new Polyline(PointsToFlatList(vertices), ModelUnits);
-      _polyline.closed = true;
-      // _polyline.length = 
-      return _polyline;
+      return new Polyline(PointsToFlatList(vertices), ModelUnits) { closed = true };
     }
 
     // Arc
@@ -519,25 +517,41 @@ namespace Objects.Converter.AutocadCivil
       var plane = new Autodesk.AutoCAD.Geometry.Plane(Point3d.Origin, Vector3d.ZAxis.TransformBy(Doc.Editor.CurrentUserCoordinateSystem)); // TODO: check this 
 
       // add all vertices
-      for (int i = 0; i < polycurve.segments.Count; i++)
+      int count = 0;
+      foreach(var segment in polycurve.segments)
       {
-        var segment = polycurve.segments[i];
         switch (segment)
         {
           case Line o:
-            polyline.AddVertexAt(i, PointToNative(o.start).Convert2d(plane), 0, 0, 0);
-            if (!polycurve.closed && i == polycurve.segments.Count - 1)
-              polyline.AddVertexAt(i + 1, PointToNative(o.end).Convert2d(plane), 0, 0, 0);
+            polyline.AddVertexAt(count, PointToNative(o.start).Convert2d(plane), 0, 0, 0);
+            if (!polycurve.closed && count == polycurve.segments.Count - 1)
+              polyline.AddVertexAt(count + 1, PointToNative(o.end).Convert2d(plane), 0, 0, 0);
+            count++;
             break;
           case Arc o:
-            var bulge = Math.Tan((double)(o.endAngle - o.startAngle) / 4) * BulgeDirection(o.startPoint, o.midPoint, o.endPoint); // bulge
-            polyline.AddVertexAt(i, PointToNative(o.startPoint).Convert2d(plane), bulge, 0, 0);
-            if (!polycurve.closed && i == polycurve.segments.Count - 1)
-              polyline.AddVertexAt(i + 1, PointToNative(o.endPoint).Convert2d(plane), 0, 0, 0);
+            var angle = o.endAngle - o.startAngle;
+            angle = angle < 0 ? angle + 2 * Math.PI : angle;
+            var bulge = Math.Tan((double)angle / 4) * BulgeDirection(o.startPoint, o.midPoint, o.endPoint); // bulge
+            polyline.AddVertexAt(count, PointToNative(o.startPoint).Convert2d(plane), bulge, 0, 0);
+            if (!polycurve.closed && count == polycurve.segments.Count - 1)
+              polyline.AddVertexAt(count + 1, PointToNative(o.endPoint).Convert2d(plane), 0, 0, 0);
+            count++;
+            break;
+          case Spiral o:
+            var vertices = o.displayValue.GetPoints().Select(p => PointToNative(p)).ToList();
+            foreach(var vertex in vertices)
+            {
+              polyline.AddVertexAt(count, vertex.Convert2d(plane), 0, 0, 0);
+              count++;
+            }
             break;
           default:
             return null;
         }
+      }
+      for (int i = 0; i < polycurve.segments.Count; i++)
+      {
+        
       }
 
       return polyline;
@@ -741,7 +755,7 @@ namespace Objects.Converter.AutocadCivil
         weights.Add(curve.GetWeightAt(i));
 
       // set nurbs curve info
-      _curve.points = PointsToFlatList(points).ToList();
+      _curve.points = PointsToFlatList(points);
       _curve.knots = knots;
       _curve.weights = weights;
       _curve.degree = curve.Degree;
@@ -1060,6 +1074,39 @@ namespace Objects.Converter.AutocadCivil
         var plane = PlaneToSpeckle(new AcadGeo.Plane(min3d, origin, corner));
         box = new Box(plane, xSize, ySize, zSize, ModelUnits) { area = area, volume = volume };
       }
+      return box;
+    }
+    public Box BoxToSpeckle(BoundBlock3d bound, bool OrientToWorldXY = false)
+    {
+      Box box = null;
+
+      var min3d = new Point3d(bound.GetMinimumPoint().X, bound.GetMinimumPoint().Y, 0);
+      var max3d = new Point3d(bound.GetMaximumPoint().X, bound.GetMaximumPoint().Y, 0);
+
+      // get dimension intervals
+      var xSize = new Interval(min3d.X, max3d.X);
+      var ySize = new Interval(min3d.Y, max3d.Y);
+      var zSize = new Interval(min3d.Z, max3d.Z);
+
+      // get box size info
+      double area = 2 * ((xSize.Length * ySize.Length) + (xSize.Length * zSize.Length) + (ySize.Length * zSize.Length));
+      double volume = xSize.Length * ySize.Length * zSize.Length;
+
+      if (OrientToWorldXY)
+      {
+        var origin = new Point3d(0, 0, 0);
+        var normal = new Vector3d(0, 0, 1);
+        var plane = PlaneToSpeckle(new AcadGeo.Plane(origin, normal));
+        box = new Box(plane, xSize, ySize, zSize, ModelUnits) { area = area, volume = volume };
+      }
+      else
+      {
+        // get base plane
+        var corner = new Point3d(max3d.X, max3d.Y, min3d.Z);
+        var origin = new Point3d((corner.X + min3d.X) / 2, (corner.Y + min3d.Y) / 2, (corner.Z + min3d.Z) / 2);
+        var plane = PlaneToSpeckle(new AcadGeo.Plane(min3d, origin, corner));
+        box = new Box(plane, xSize, ySize, zSize, ModelUnits) { area = area, volume = volume };
+      }
 
       return box;
     }
@@ -1075,9 +1122,21 @@ namespace Objects.Converter.AutocadCivil
       var ySize = new Interval(min.Y, max.Y);
       var zSize = new Interval(min.Z, max.Z);
 
-      // get box size info
-      double area = 2 * ((xSize.Length * ySize.Length) + (xSize.Length * zSize.Length) + (ySize.Length * zSize.Length));
-      double volume = xSize.Length * ySize.Length * zSize.Length;
+        if (OrientToWorldXY)
+        {
+          var origin = new Point3d(0, 0, 0);
+          var normal = new Vector3d(0, 0, 1);
+          var plane = PlaneToSpeckle(new AcadGeo.Plane(origin, normal));
+          box = new Box(plane, xSize, ySize, zSize, ModelUnits) { area = area, volume = volume };
+        }
+        else
+        {
+          // get base plane
+          var corner = new Point3d(max.X, max.Y, min.Z);
+          var origin = new Point3d((corner.X + min.X) / 2, (corner.Y + min.Y) / 2, (corner.Z + min.Z) / 2);
+          var plane = PlaneToSpeckle(new AcadGeo.Plane(min, origin, corner));
+          box = new Box(plane, xSize, ySize, zSize, ModelUnits) { area = area, volume = volume };
+        }
 
       if (OrientToWorldXY)
       {
@@ -1344,7 +1403,7 @@ namespace Objects.Converter.AutocadCivil
       var vertices = PointsToFlatList(_vertices);
 
       // faces
-      var _faces = new List<int>();
+      var faces = new List<int>();
       int[] faceArr = mesh.FaceArray.ToArray(); // contains vertex indices
       int edgeCount = 0;
       for (int i = 0; i < faceArr.Length; i = i + edgeCount + 1)
@@ -1354,9 +1413,9 @@ namespace Objects.Converter.AutocadCivil
         for (int j = i + 1; j <= i + edgeCount; j++)
           faceVertices.Add(faceArr[j]);
         if (edgeCount == 4) // quad face
-          _faces.AddRange(new List<int> { 1, faceVertices[0], faceVertices[1], faceVertices[2], faceVertices[3] });
+          faces.AddRange(new List<int> { 1, faceVertices[0], faceVertices[1], faceVertices[2], faceVertices[3] });
         else // triangle face
-          _faces.AddRange(new List<int> { 0, faceVertices[0], faceVertices[1], faceVertices[2] });
+          faces.AddRange(new List<int> { 0, faceVertices[0], faceVertices[1], faceVertices[2] });
       }
 
       // colors
@@ -1370,6 +1429,8 @@ namespace Objects.Converter.AutocadCivil
     // Polyface mesh vertex indexing starts at 1. Add 1 to face vertex index when converting to native
     public PolyFaceMesh MeshToNativeDB(Mesh mesh)
     {
+      mesh.TriangulateMesh(true);
+      
       // get vertex points
       var vertices = new Point3dCollection();
       var points = mesh.GetPoints().Select(o => PointToNative(o)).ToList();
@@ -1412,8 +1473,8 @@ namespace Objects.Converter.AutocadCivil
         int j = 0;
         while (j < mesh.faces.Count)
         {
-          FaceRecord face = null;
-          if (mesh.faces[j] == 0) // triangle
+          FaceRecord face;
+          if (mesh.faces[j] == 3) // triangle
           {
             face = new FaceRecord((short)(mesh.faces[j + 1] + 1), (short)(mesh.faces[j + 2] + 1), (short)(mesh.faces[j + 3] + 1), 0);
             j += 4;
@@ -1423,14 +1484,13 @@ namespace Objects.Converter.AutocadCivil
             face = new FaceRecord((short)(mesh.faces[j + 1] + 1), (short)(mesh.faces[j + 2] + 1), (short)(mesh.faces[j + 3] + 1), (short)(mesh.faces[j + 4] + 1));
             j += 5;
           }
-          if (face != null)
+          
+          if (face.IsNewObject)
           {
-            if (face.IsNewObject)
-            {
-              _mesh.AppendFaceRecord(face);
-              tr.AddNewlyCreatedDBObject(face, true);
-            }
+            _mesh.AppendFaceRecord(face);
+            tr.AddNewlyCreatedDBObject(face, true);
           }
+          
         }
 
         tr.Commit();
@@ -1460,7 +1520,7 @@ namespace Objects.Converter.AutocadCivil
 
           // output mesh vars
           var _vertices = new List<Point3d>();
-          var _faces = new List<int>();
+          var faces = new List<int>();
 
           // create mesh filterS
           using (var filter = new AcadBRep.Mesh2dFilter())
@@ -1488,9 +1548,9 @@ namespace Objects.Converter.AutocadCivil
 
                 // get faces
                 if (e.Nodes.Count() == 3)
-                  _faces.AddRange(new List<int> { 0, faceIndices[0], faceIndices[1], faceIndices[2] });
+                  faces.AddRange(new List<int> { 0, faceIndices[0], faceIndices[1], faceIndices[2] });
                 else if (e.Nodes.Count() == 4)
-                  _faces.AddRange(new List<int> { 1, faceIndices[0], faceIndices[1], faceIndices[2], faceIndices[3] });
+                  faces.AddRange(new List<int> { 1, faceIndices[0], faceIndices[1], faceIndices[2], faceIndices[3] });
                 e.Dispose();
               }
             }
@@ -1499,7 +1559,7 @@ namespace Objects.Converter.AutocadCivil
 
           // create speckle mesh
           var vertices = PointsToFlatList(_vertices);
-          mesh = new Mesh(vertices, _faces);
+          mesh = new Mesh(vertices, faces);
           mesh.units = ModelUnits;
           if (solid != null)
             mesh.bbox = BoxToSpeckle(solid.GeometricExtents);

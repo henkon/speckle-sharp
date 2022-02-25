@@ -1,15 +1,19 @@
 ﻿using Objects.Geometry;
 using Speckle.Core.Kits;
 using Speckle.Core.Models;
+using Speckle.Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Text;
 
 namespace Objects.BuiltElements
 {
-  public class Alignment : Base
+  public class Alignment : Base, IDisplayValue<Polyline>
   {
-    public List<ICurve> curves { get; set; } // a list of line, arc, and spirals, or polycurves comprised of the 3 curve types
+    [JsonIgnore, Obsolete("Use curves property")]
+    public ICurve baseCurve { get; set; }
+
+    public List<ICurve> curves { get; set; }
 
     public string name { get; set; }
 
@@ -27,6 +31,7 @@ namespace Objects.BuiltElements
     /// </summary>
     public List<bool> stationEquationDirections { get; set; }
 
+    [DetachProperty]
     public Polyline displayValue { get; set; }
 
     public string units { get; set; }

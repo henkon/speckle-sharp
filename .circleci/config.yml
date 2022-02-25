@@ -9,6 +9,7 @@ orbs:
   win: circleci/windows@2.4.0
   # Upload artifacts to s3
   aws-s3: circleci/aws-s3@2.0.0
+  codecov: codecov/codecov@3.2.2
 
 # adapted from https://circleci.com/developer/orbs/orb/storytel/nugetpublish#commands-packandpublish
 commands:
@@ -62,6 +63,9 @@ parameters:
   run_connector_microstation:
     type: boolean
     default: false
+  run_connector_teklastructures:
+    type: boolean
+    default: false
 
 jobs: # Each project will have individual jobs for each specific task it has to execute (build, release...)
   
@@ -82,7 +86,8 @@ jobs: # Each project will have individual jobs for each specific task it has to 
             {"regex": "ConnectorRhino/.*", "param_name": "run_connector_rhino"},
             {"regex": "ConnectorAutocadCivil/.*", "param_name": "run_connector_autocadcivil"},
             {"regex": "ConnectorETABS/.*", "param_name": "run_connector_etabs"},
-            {"regex": "ConnectorMicroStation/.*", "param_name": "run_connector_microstation"}
+            {"regex": "ConnectorMicroStation/.*", "param_name": "run_connector_microstation"},
+            {"regex": "ConnectorTeklaStructures/.*", "param_name": "run_connector_teklastructures"}
           ]'
           base-branch: 'main'
   
@@ -124,14 +129,16 @@ jobs: # Each project will have individual jobs for each specific task it has to 
       - checkout 
       - run: 
           name: Unit Test
-          command: dotnet test Core/Tests/TestsUnit.csproj -c Release -v q --logger:"junit;LogFileName={assembly}.results.xml" --results-directory=TestResults
+          command: dotnet test Core/Tests/TestsUnit.csproj -c Release -v q --logger:"junit;LogFileName={assembly}.results.xml" --results-directory=TestResults --collect:"XPlat Code Coverage" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
       - run:
           name: Integration Tests # The integration tests are runinng on our test sevrer
-          command: dotnet test Core/IntegrationTests/TestsIntegration.csproj -c Release -v q --logger:"junit;LogFileName={assembly}.results.xml" --results-directory=TestResults
+          command: dotnet test Core/IntegrationTests/TestsIntegration.csproj -c Release -v q --logger:"junit;LogFileName={assembly}.results.xml" --results-directory=TestResults --collect:"XPlat Code Coverage" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
       - store_test_results:
           path: TestResults
       - store_artifacts:
           path: TestResults
+
+      - codecov/upload
 
   build-objects:
     executor:
@@ -188,12 +195,13 @@ jobs: # Each project will have individual jobs for each specific task it has to 
           name: Build << parameters.slnname >>
           command: |
             $tag = if([string]::IsNullOrEmpty($env:CIRCLE_TAG)) { "0.0.0" } else { $env:CIRCLE_TAG }
-            $semver = if($tag.Contains('/')) {$tag.replace("-beta","").Split("/")[1] } else { $tag }
-            $version = "$($semver).$($env:CIRCLE_BUILD_NUM)"
+            $semver = if($tag.Contains('/')) {$tag.Split("/")[1] } else { $tag }
+            $ver = $semver.replace("-beta","")
+            $version = "$($ver).$($env:CIRCLE_BUILD_NUM)"
             msbuild << parameters.slnname >>/<< parameters.slnname >>.sln /p:Configuration=Release /p:WarningLevel=0 /p:IsDesktopBuild=false /p:AssemblyVersionNumber=$version /p:AssemblyInformationalVersion=$semver /p:Version=$version
             $channel = "latest"
             if($env:CIRCLE_TAG -like "*-beta") { $channel = "beta" }    
-            if(-Not [string]::IsNullOrEmpty($env:CIRCLE_TAG)) { New-Item -Force "speckle-sharp-ci-tools/Installers/<< parameters.slug >>/$channel.yml" -ItemType File -Value "version: $version" }
+            if(-Not [string]::IsNullOrEmpty($env:CIRCLE_TAG)) { New-Item -Force "speckle-sharp-ci-tools/Installers/<< parameters.slug >>/$channel.yml" -ItemType File -Value "version: $semver" }
       - run: 
           name: Deploy?
           command: | # stop job if not triggered by deployment workflow (parameters.installer == false)
@@ -333,6 +341,14 @@ workflows:
           slnname: ConnectorMicroStation
           dllname: SpeckleConnectorOpenRoads.dll
 
+  # TeklaStructures Connector - Build/Test
+  connector_teklastructures:
+    when: << pipeline.parameters.run_connector_teklastructures>>
+    jobs:
+      - build-connector: 
+          name: build-connector-teklastructures
+          slnname: ConnectorTeklaStructures
+          dllname: SpeckleConnectorTeklaStructures.dll
   nuget:
     jobs:
       # CORE Nuget Publish        
@@ -373,8 +389,8 @@ workflows:
           filters:
             branches:
               ignore: /.*/ # For testing only: /ci\/.*/
-            tags: # runs on any tag in the format "xyz/1.0.0" or "xyz/1.0.0-beta"         
-              only: /^(all|dynamo|revit|grasshopper|rhino|autocadcivil|revitdynamo|rhinogh|etabs)\/([0-9]+)\.([0-9]+)\.([0-9]+)(?:-beta)?$/
+            tags: # runs on any tag in the format "xyz/1.0.0" or "xyz/1.0.0-beta" -- TO UPDATE IDENTICAL LINE AT BOTTOM --        
+              only: /^(all|dynamo|revit|grasshopper|rhino|autocadcivil|revitdynamo|rhinogh|etabs|microstation|openbuildings|openrail|openroads|bentley|teklastructures)\/([0-9]+)\.([0-9]+)\.([0-9]+)(?:-beta)?$/
 
       # DYNAMO Build&Deploy
       - build-connector:
@@ -494,7 +510,7 @@ workflows:
             branches:
               ignore: /.*/ # For testing only! /ci\/.*/
             tags:
-              only: /^(microstation|all)\/([0-9]+)\.([0-9]+)\.([0-9]+)(?:-beta)?$/
+              only: /^(microstation|bentley|all)\/([0-9]+)\.([0-9]+)\.([0-9]+)(?:-beta)?$/
 
       # OPENBUILDINGS Build&Deploy
       - build-connector:
@@ -509,7 +525,7 @@ workflows:
             branches:
               ignore: /.*/ # For testing only! /ci\/.*/
             tags:
-              only: /^(microstation|all)\/([0-9]+)\.([0-9]+)\.([0-9]+)(?:-beta)?$/
+              only: /^(openbuildings|bentley|all)\/([0-9]+)\.([0-9]+)\.([0-9]+)(?:-beta)?$/
       
       # OPENRAIL Build&Deploy
       - build-connector:
@@ -524,7 +540,7 @@ workflows:
             branches:
               ignore: /.*/ # For testing only! /ci\/.*/
             tags:
-              only: /^(microstation|all)\/([0-9]+)\.([0-9]+)\.([0-9]+)(?:-beta)?$/
+              only: /^(openrail|bentley|all)\/([0-9]+)\.([0-9]+)\.([0-9]+)(?:-beta)?$/
 
       # OPENROADS Build&Deploy
       - build-connector:
@@ -539,7 +555,22 @@ workflows:
             branches:
               ignore: /.*/ # For testing only! /ci\/.*/
             tags:
-              only: /^(microstation|all)\/([0-9]+)\.([0-9]+)\.([0-9]+)(?:-beta)?$/
+              only: /^(openroads|bentley|all)\/([0-9]+)\.([0-9]+)\.([0-9]+)(?:-beta)?$/
+      
+      # TeklaStructures Build&Deploy
+      - build-connector:
+          name: build-deploy-connector-teklastructures
+          slnname: ConnectorTeklaStructures
+          dllname: SpeckleConnectorTeklaStructures.dll
+          slug: teklastructures
+          installer: true
+          requires: 
+            - get-ci-tools
+          filters:
+            branches:
+              ignore: /.*/ # For testing only! /ci\/.*/
+            tags:
+              only: /^(teklastructures|all)\/([0-9]+)\.([0-9]+)\.([0-9]+)(?:-beta)?$/
      
       # DEPLOY ALL CONNECTORS
       - deploy: # Will run if all the triggered workflows succeed
@@ -556,6 +587,7 @@ workflows:
             - build-deploy-connector-openbuildings
             - build-deploy-connector-openrail
             - build-deploy-connector-openroads
+            - build-deploy-connector-teklastructures
           filters:
-            tags: # runs on any tag in the format "xyz/1.0.0" or "xyz/1.0.0-beta"
-              only: /^(all|dynamo|revit|grasshopper|rhino|autocadcivil|revitdynamo|rhinogh|etabs|microstation|openbuildings|openrail|openroads)\/([0-9]+)\.([0-9]+)\.([0-9]+)(?:-beta)?$/
+            tags: # runs on any tag in the format "xyz/1.0.0" or "xyz/1.0.0-beta" -- TO UPDATE IDENTICAL LINE AT ~380  --    
+              only: /^(all|dynamo|revit|grasshopper|rhino|autocadcivil|revitdynamo|rhinogh|etabs|microstation|openbuildings|openrail|openroads|bentley|teklastructures)\/([0-9]+)\.([0-9]+)\.([0-9]+)(?:-beta)?$/

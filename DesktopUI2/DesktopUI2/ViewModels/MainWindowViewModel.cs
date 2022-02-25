@@ -11,6 +11,7 @@ using Material.Styles.Themes;
 using Material.Styles.Themes.Base;
 using ReactiveUI;
 using Speckle.Core.Api;
+using Speckle.Core.Logging;
 using Splat;
 
 namespace DesktopUI2.ViewModels
@@ -25,12 +26,13 @@ namespace DesktopUI2.ViewModels
 
     public ReactiveCommand<Unit, Unit> GoBack => Router.NavigateBack;
 
-    public string Title => "for " + Bindings.GetHostAppName();
-    public string TitleFull => "Speckle for " + Bindings.GetHostAppName();
+    public string Title => "for " + Bindings.GetHostAppNameVersion();
+    public string TitleFull => "Speckle for " + Bindings.GetHostAppNameVersion();
     public string Version => "v" + Bindings.ConnectorVersion;
     public MainWindowViewModel(ConnectorBindings _bindings)
     {
       Bindings = _bindings;
+      Setup.Init(Bindings.GetHostAppNameVersion(), Bindings.GetHostAppName());
       Init();
     }
     public MainWindowViewModel()
@@ -70,6 +72,8 @@ namespace DesktopUI2.ViewModels
 
     public void ToggleDarkThemeCommand()
     {
+      Analytics.TrackEvent(Analytics.Events.DUIAction, new Dictionary<string, object>() { { "name", "Toggle Theme" } });
+
       var theme = PaletteHelper.GetTheme();
 
       if (theme.GetBaseTheme() == BaseThemeMode.Dark)
@@ -82,6 +86,7 @@ namespace DesktopUI2.ViewModels
 
     public void RefreshCommand()
     {
+      Analytics.TrackEvent(Analytics.Events.DUIAction, new Dictionary<string, object>() { { "name", "Refresh" } });
       HomeViewModel.Instance.Init();
     }
 

@@ -10,6 +10,19 @@ using Objects.Structural.Materials;
 
 namespace Objects.Structural.ETABS.Properties
 {
+    public class ETABSOpening: Property2D{
+      public bool isOpening { get; set; }
+
+    [SchemaInfo("Opening", "Create an ETABS Opening", "ETABS", "Properties")]
+    public ETABSOpening(bool isOpening)
+    {
+      this.isOpening = isOpening;
+    }
+
+    public ETABSOpening()
+    {
+    }
+  }
     public class ETABSProperty2D : Property2D
     {
         public ETABSPropertyType2D type2D { get; set; }
@@ -83,7 +96,11 @@ namespace Objects.Structural.ETABS.Properties
 
         public class Slab : ETABSProperty2D
         {
-            [SchemaInfo("Slab", "Create an ETABS Slab", "ETABS", "Properties")]
+      public Slab()
+      {
+      }
+
+      [SchemaInfo("Slab", "Create an ETABS Slab", "ETABS", "Properties")]
             public Slab(string PropertyName, ShellType shell, Material ConcreteMaterial,double Thickness )
             {
 
@@ -96,6 +113,7 @@ namespace Objects.Structural.ETABS.Properties
                 material = ConcreteMaterial;
                 thickness = Thickness;
             }
+
         }
 
         public class DeckFilled : ETABSProperty2D
