@@ -336,6 +336,18 @@ namespace Objects.Converter.AutocadCivil
       // TODO: This needs to be improved with more research into autocad .AngleOnPlane() return values (negative angles, etc).
       var totalAngle = (arc.Clockwise) ? System.Math.Abs(endAngle - startAngle) : System.Math.Abs(endAngle - startAngle);
 
+      // create autocad arc
+      CircularArc2d aarc = null;
+      if (!arc.Clockwise)
+      {
+        aarc = new CircularArc2d(arc.StartPoint, arc.CenterPoint, arc.EndPoint);
+      }
+      else
+      {
+        aarc = new CircularArc2d(arc.EndPoint, arc.CenterPoint, arc.StartPoint);
+      }
+
+
       // create arc
       var _arc = new Arc(PlaneToSpeckle(plane), arc.Radius, startAngle, endAngle, totalAngle, ModelUnits);
       _arc.startPoint = PointToSpeckle(arc.StartPoint);
@@ -344,6 +356,7 @@ namespace Objects.Converter.AutocadCivil
       _arc.domain = IntervalToSpeckle(new Acad.Interval(0, 1, tolerance));
       _arc.length = arc.Length;
 
+      var _aarc = ArcToSpeckle(aarc);
       return _arc;
     }
     private Spiral AlignmentSpiralToSpeckle(CivilDB.AlignmentSubEntitySpiral spiral, CivilDB.Alignment alignment)
