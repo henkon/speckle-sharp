@@ -1078,49 +1078,21 @@ namespace Objects.Converter.AutocadCivil
     }
     public Box BoxToSpeckle(BoundBlock3d bound, bool OrientToWorldXY = false)
     {
-      Box box = null;
-
-      var min3d = new Point3d(bound.GetMinimumPoint().X, bound.GetMinimumPoint().Y, 0);
-      var max3d = new Point3d(bound.GetMaximumPoint().X, bound.GetMaximumPoint().Y, 0);
-
-      // get dimension intervals
-      var xSize = new Interval(min3d.X, max3d.X);
-      var ySize = new Interval(min3d.Y, max3d.Y);
-      var zSize = new Interval(min3d.Z, max3d.Z);
-
-      // get box size info
-      double area = 2 * ((xSize.Length * ySize.Length) + (xSize.Length * zSize.Length) + (ySize.Length * zSize.Length));
-      double volume = xSize.Length * ySize.Length * zSize.Length;
-
-      if (OrientToWorldXY)
+      try
       {
-        var origin = new Point3d(0, 0, 0);
-        var normal = new Vector3d(0, 0, 1);
-        var plane = PlaneToSpeckle(new AcadGeo.Plane(origin, normal));
-        box = new Box(plane, xSize, ySize, zSize, ModelUnits) { area = area, volume = volume };
-      }
-      else
-      {
-        // get base plane
-        var corner = new Point3d(max3d.X, max3d.Y, min3d.Z);
-        var origin = new Point3d((corner.X + min3d.X) / 2, (corner.Y + min3d.Y) / 2, (corner.Z + min3d.Z) / 2);
-        var plane = PlaneToSpeckle(new AcadGeo.Plane(min3d, origin, corner));
-        box = new Box(plane, xSize, ySize, zSize, ModelUnits) { area = area, volume = volume };
-      }
+        Box box = null;
 
-      return box;
-    }
-    public Box BoxToSpeckle(BoundBlock3d bound, bool OrientToWorldXY = false)
-    {
-      Box box = null;
+        var min = bound.GetMinimumPoint();
+        var max = bound.GetMaximumPoint();
 
-      var min = bound.GetMinimumPoint();
-      var max = bound.GetMaximumPoint();
+        // get dimension intervals
+        var xSize = new Interval(min.X, max.X);
+        var ySize = new Interval(min.Y, max.Y);
+        var zSize = new Interval(min.Z, max.Z);
 
-      // get dimension intervals
-      var xSize = new Interval(min.X, max.X);
-      var ySize = new Interval(min.Y, max.Y);
-      var zSize = new Interval(min.Z, max.Z);
+        // get box size info
+        double area = 2 * ((xSize.Length * ySize.Length) + (xSize.Length * zSize.Length) + (ySize.Length * zSize.Length));
+        double volume = xSize.Length * ySize.Length * zSize.Length;
 
         if (OrientToWorldXY)
         {
@@ -1138,23 +1110,12 @@ namespace Objects.Converter.AutocadCivil
           box = new Box(plane, xSize, ySize, zSize, ModelUnits) { area = area, volume = volume };
         }
 
-      if (OrientToWorldXY)
-      {
-        var origin = new Point3d(0, 0, 0);
-        var normal = new Vector3d(0, 0, 1);
-        var plane = PlaneToSpeckle(new AcadGeo.Plane(origin, normal));
-        box = new Box(plane, xSize, ySize, zSize, ModelUnits) { area = area, volume = volume };
+        return box;
       }
-      else
+      catch
       {
-        // get base plane
-        var corner = new Point3d(max.X, max.Y, min.Z);
-        var origin = new Point3d((corner.X + min.X) / 2, (corner.Y + min.Y) / 2, (corner.Z + min.Z) / 2);
-        var plane = PlaneToSpeckle(new AcadGeo.Plane(min, origin, corner));
-        box = new Box(plane, xSize, ySize, zSize, ModelUnits) { area = area, volume = volume };
+        return null;
       }
-
-      return box;
     }
     public Box BoxToSpeckle(AcadDB.Extents3d extents, bool OrientToWorldXY = false)
     {
@@ -1175,7 +1136,7 @@ namespace Objects.Converter.AutocadCivil
         {
           var origin = new Point3d(0, 0, 0);
           var normal = new Vector3d(0, 0, 1);
-          var plane = PlaneToSpeckle(new AcadGeo.Plane(origin, normal));
+          var plane = PlaneToSpeckle(new Autodesk.AutoCAD.Geometry.Plane(origin, normal));
           box = new Box(plane, xSize, ySize, zSize, ModelUnits) { area = area, volume = volume };
         }
         else
@@ -1183,7 +1144,7 @@ namespace Objects.Converter.AutocadCivil
           // get base plane
           var corner = new Point3d(extents.MaxPoint.X, extents.MaxPoint.Y, extents.MinPoint.Z);
           var origin = new Point3d((corner.X + extents.MinPoint.X) / 2, (corner.Y + extents.MinPoint.Y) / 2, (corner.Z + extents.MinPoint.Z) / 2);
-          var plane = PlaneToSpeckle(new AcadGeo.Plane(extents.MinPoint, origin, corner));
+          var plane = PlaneToSpeckle(new Autodesk.AutoCAD.Geometry.Plane(extents.MinPoint, origin, corner));
           box = new Box(plane, xSize, ySize, zSize, ModelUnits) { area = area, volume = volume };
         }
 
@@ -1421,11 +1382,12 @@ namespace Objects.Converter.AutocadCivil
       // colors
       var colors = mesh.VertexColorArray.Select(o => Color.FromArgb(Convert.ToInt32(o.Red), Convert.ToInt32(o.Green), Convert.ToInt32(o.Blue)).ToArgb()).ToList();
 
-      var speckleMesh = new Mesh(vertices, _faces, colors, null, ModelUnits);
+      var speckleMesh = new Mesh(vertices, faces, colors, null, ModelUnits);
       speckleMesh.bbox = BoxToSpeckle(mesh.GeometricExtents, true);
 
       return speckleMesh;
     }
+
     // Polyface mesh vertex indexing starts at 1. Add 1 to face vertex index when converting to native
     public PolyFaceMesh MeshToNativeDB(Mesh mesh)
     {

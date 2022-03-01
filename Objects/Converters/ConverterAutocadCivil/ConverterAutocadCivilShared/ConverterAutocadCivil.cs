@@ -23,7 +23,6 @@ using Plane = Objects.Geometry.Plane;
 using Point = Objects.Geometry.Point;
 using Polycurve = Objects.Geometry.Polycurve;
 using Polyline = Objects.Geometry.Polyline;
-using Spiral = Objects.Geometry.Spiral;
 using Surface = Objects.Geometry.Surface;
 using Vector = Objects.Geometry.Vector;
 
