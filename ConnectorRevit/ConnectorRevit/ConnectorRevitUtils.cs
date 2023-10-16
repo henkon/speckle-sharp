@@ -1,9 +1,12 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.IO;
 using Autodesk.Revit.DB;
+using Autodesk.Revit.UI;
+using Revit.Async;
 using Speckle.Core.Kits;
 using Speckle.Core.Logging;
 
@@ -24,6 +27,10 @@ namespace Speckle.ConnectorRevit
     public static string RevitAppName = HostApplications.Revit.GetVersion(HostAppVersion.v2019);
 #endif
 
+
+    private static string strGuidCommitId = "D913AEDC-D516-4452-BBC4-8CA65F796F46";
+    private static string strGuidStreamId = "6683BAC9-04FD-4C22-B865-21505DF33979";
+    private static string _sharedParamFilePath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + @"\coBuilder";
     private static List<string> _cachedParameters = null;
     private static List<string> _cachedViews = null;
     public static List<SpeckleException> ConversionErrors { get; set; }
@@ -57,6 +64,179 @@ namespace Speckle.ConnectorRevit
       return _categories;
     }
 
+
+    //HK
+    public static string GetShareParameterFileName(Document doc)
+    {
+      Autodesk.Revit.ApplicationServices.Application app = doc.Application;
+      string a = app.SharedParametersFilename;
+      return a;
+    }
+
+    public static string GetSharedParamFile(Document doc)
+    {
+      var path = Path.Combine(_sharedParamFilePath, GetShareParameterFileName(doc));
+      return path;
+    }
+
+    private static Definition CreateDefinition(string paramName, ParameterType paramType, Guid strGuid, bool isVisible, DefinitionGroup defGroup)
+    {
+      ExternalDefinitionCreationOptions options = new ExternalDefinitionCreationOptions(paramName, paramType);
+      options.Name = paramName;
+      options.GUID = strGuid;
+      options.Visible = isVisible;
+
+      var definition = defGroup.Definitions.Create(options);
+      return definition;
+    }
+
+    public static string GetSpeckleCommitId()
+    {
+      return strGuidCommitId;
+    }
+
+    public static string GetSpeckleStreamId()
+    {
+      return strGuidStreamId;
+    }
+
+    public static string GetSpeckleProjectParamValue(Document doc, string strGuid)
+    {
+      Parameter pp;
+      //Autodesk.Revit.ApplicationServices.Application _app = doc.Application;
+
+      Element projInfo = doc.ProjectInformation;
+      Guid tt = Guid.Parse(strGuid);
+      pp = projInfo.get_Parameter(tt);
+
+      if (pp == null)
+        return "";
+      else
+        return pp.AsString();
+    }
+
+    public static async Task<int> AddSpeckleSharedParameters(Document doc, string streamid, string commitid)
+    {
+
+      Autodesk.Revit.ApplicationServices.Application _app = doc.Application;
+      
+      Element projInfo = doc.ProjectInformation;
+      int status = 0;
+      //Parameter paramProjectNumber = _app.HelperParams.GetOrCreateElemSharedParameter(projInfo, ShareParamCoBuilderNumber, ParamGroup, ParameterType.Text, true, ShareParamCoBuilderNumberGuid);
+      //BindSharedParamResult result = BindSharedParameter(elem.Document, elem.Category, paramName, grpName, paramType, instanceBinding, strGuid, isVisible);
+
+      using (DefinitionFile defFile = _app.OpenSharedParameterFile())
+      {
+        string ParamGroup = "coBuilder";
+        string paramName = "SpeckleCommitId";
+        
+        ParameterType paramType = ParameterType.Text;
+        Guid strGuidCommit = Guid.Parse(strGuidCommitId);
+        Guid strGuidStream = Guid.Parse(strGuidStreamId);
+        bool isVisible = true;
+
+        Parameter pm;
+        //bool success;
+        //Exception exception;
+
+        
+
+        var (success, exception) = await RevitTask.RunAsync(app =>
+        {
+          //string transactionName = $"Baking stream {state.StreamId}";
+          //using var g = new TransactionGroup(CurrentDoc.Document, transactionName);
+          using var t = new Transaction(doc, "CreateProjParam");
+
+          //g.Start();
+          //var failOpts = t.GetFailureHandlingOptions();
+          //failOpts.SetFailuresPreprocessor(new ErrorEater(converter));
+          //failOpts.SetClearAfterRollback(true);
+          //t.SetFailureHandlingOptions(failOpts);
+          t.Start();
+
+
+          try
+          {
+            Category elementCategory = projInfo.Category;
+
+            //HK need more testing whether paramgroup exists, etc...
+
+            var defGroup = defFile.Groups.get_Item(ParamGroup);
+            
+            CategorySet categorySet = _app.Create.NewCategorySet();
+            //using (Transaction tran = new Transaction(doc))
+            //{
+            //tran.Start("CreateProjParam");
+
+            pm = projInfo.get_Parameter(strGuidCommit);
+            if (pm == null)
+            {
+              Definition definition = defGroup.Definitions.get_Item(paramName);
+              if (definition == null)
+                definition = CreateDefinition(paramName, paramType, strGuidCommit, isVisible, defGroup); // HK: here created param
+
+              categorySet.Insert(elementCategory);
+
+              try
+              {
+                Binding newBinding = null;
+                newBinding = _app.Create.NewInstanceBinding(categorySet);
+
+                var inserted = doc.ParameterBindings.Insert(definition, newBinding);
+                if (inserted)
+                {
+                  //return (1, "ok");
+                  status = 1;
+                }
+              }
+              catch (Exception ex) { }
+             
+              pm = projInfo.get_Parameter(strGuidCommit);
+              pm.Set(commitid);
+            }
+
+            pm = projInfo.get_Parameter(strGuidStream);
+
+            if (pm == null)
+            {
+
+              paramName = "SpeckleStreamId";
+              Definition definition2 = defGroup.Definitions.get_Item(paramName);
+
+              if (definition2 == null)
+                definition2 = CreateDefinition(paramName, paramType, strGuidStream, isVisible, defGroup); // HK: here created param
+                                                                                                        //CategorySet categorySet2 = _app.Create.NewCategorySet(); // do not need to create a new one?
+
+
+              //categorySet.Insert(elementCategory);
+
+              Binding newBinding2 = null;
+              newBinding2 = _app.Create.NewInstanceBinding(categorySet);
+
+              var inserted2 = doc.ParameterBindings.Insert(definition2, newBinding2);
+              if (inserted2)
+              {
+                //return (1, "ok");
+                status = 1;
+              }
+            
+              pm = projInfo.get_Parameter(strGuidStream);
+              pm.Set(streamid);
+            }
+            t.Commit();
+            //}
+          }
+          catch (Exception ex)
+          {
+            
+            return (0, "not ok");
+          }
+          return (1, "ok");
+          //BuiltInCategory.OST_ProjectInformation
+        }).ConfigureAwait(false);
+      }
+      return status;
+    }
     /// <summary>
     /// We want to display a user-friendly category names when grouping objects
     /// For this we are simplifying the BuiltIn one as otherwise, by using the display value, we'd be getting localized category names

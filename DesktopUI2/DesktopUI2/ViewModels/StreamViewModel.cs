@@ -40,6 +40,11 @@ namespace DesktopUI2.ViewModels;
 
 public class StreamViewModel : ReactiveObject, IRoutableViewModel, IDisposable
 {
+
+  //public static UIApplication RevitApp;
+
+  //public static UIDocument CurrentDoc => RevitApp.ActiveUIDocument;
+
   public StreamViewModel(StreamState streamState, IScreen hostScreen, ICommand removeSavedStreamCommand)
   {
     try
@@ -1262,6 +1267,13 @@ public class StreamViewModel : ReactiveObject, IRoutableViewModel, IDisposable
           { "savedStreams", HomeViewModel.Instance.SavedStreams?.Count }
         }
       );
+
+      // HK: here it seems I can get at least the commitid and streamid and even branchid
+      //var myStreamId = StreamState.StreamId;
+      //var myCommitId = commitId;
+      //var myBranchId = SelectedBranch.Branch.id; //check if null or something?
+
+      //How to save this information somewhere. Seems Share Param is not easy. Since speckle now is also using 
 
       DisplayPopupNotification(
         new PopUpNotificationViewModel

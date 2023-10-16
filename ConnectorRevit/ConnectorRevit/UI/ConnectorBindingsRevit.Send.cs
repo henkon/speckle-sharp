@@ -246,6 +246,20 @@ namespace Speckle.ConnectorRevit.UI
       if (state.PreviousCommitId != null) { actualCommit.parents = new List<string>() { state.PreviousCommitId }; }
 
       var commitId = await ConnectorHelpers.CreateCommit(progress.CancellationToken, client, actualCommit);
+
+      //HK add some here? this works
+      string hh = ConnectorRevitUtils.GetShareParameterFileName(CurrentDoc.Document);
+      //Task<int> res = ConnectorRevitUtils.AddSpeckleSharedParameters(CurrentDoc.Document, streamId, commitId);
+      var res2 = await Task.Run(() => ConnectorRevitUtils.AddSpeckleSharedParameters(CurrentDoc.Document, streamId, commitId)).ConfigureAwait(true);
+
+      // the task above is of course not executed synchronously, so the procedures below will always return null since the above is not yet executed.
+      // where to put these if necessary is a question
+      string tempCommitId = ConnectorRevitUtils.GetSpeckleCommitId();
+      string myCommitId = ConnectorRevitUtils.GetSpeckleProjectParamValue(CurrentDoc.Document, tempCommitId);
+      string tempStreamId = ConnectorRevitUtils.GetSpeckleStreamId();
+      string myStreamId = ConnectorRevitUtils.GetSpeckleProjectParamValue(CurrentDoc.Document, tempStreamId);
+
+
       return commitId;
     }
 
